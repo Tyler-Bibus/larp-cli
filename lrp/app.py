@@ -19,6 +19,7 @@ import unicodedata
 
 from . import __version__
 from .content import FONT, HELP, TRANSMISSIONS
+from .creatures import CreaturePanels
 from .motion import marquee, segment, tesseract
 from .state import Store, clean, state_path
 
@@ -64,11 +65,11 @@ def wrap(text, limit):
 
 
 COMMANDS = ("help", "home", "feed", "dossier", "vault", "status", "panic", "contain",
-            "aura", "grass", "pause", "calm", "note", "alias", "shell", "quit")
-VIEWS = ("CONTROL", "WIRE", "DOSSIER", "VAULT", "MANUAL")
+            "aura", "grass", "pause", "calm", "note", "alias", "shell", "quit", "fly", "brofist", "stimulate")
+VIEWS = ("CONTROL", "WIRE", "DOSSIER", "VAULT", "MANUAL", "FLYLAB")
 
 
-class Console:
+class Console(CreaturePanels):
     def __init__(self, screen, args, store):
         self.screen, self.args, self.store = screen, args, store
         self.running = True
@@ -83,6 +84,9 @@ class Console:
         self.last_frame = self.started
         self.fx_time = 0.0
         self.burst_until = 0.0
+        self.fly_stimulus_until = 0.0
+        self.brofist_started = None
+        self.buttons = []
         self.last_host = 0
         self.boot_until = self.started + (0 if args.no_boot or self.calm else 1.6)
         self.threat = 86
@@ -111,6 +115,11 @@ class Console:
     def setup(self):
         self.screen.keypad(True)
         self.screen.timeout(50)
+        try:
+            curses.mousemask(curses.BUTTON1_PRESSED)
+            curses.mouseinterval(0)
+        except curses.error:
+            pass  # Keyboard controls work in terminals without mouse reporting.
         curses.set_escdelay(25)
         try:
             curses.curs_set(0)
@@ -330,8 +339,12 @@ class Console:
             self.put(30, x + 2, f"AURA BALANCE  {self.store.data['aura']:+,}", "amber", size)
         if bottom >= 35:
             self.put(27, x + 2, f"COPE {self.cope:02}% / AURA {self.store.data['aura']:+,}", "amber", size)
-            self.reactor(29, x + 2, size, bottom - 30)
-            self.put(bottom - 1, x + 2, "4D COPE REACTOR / " + spinner, "mint", size)
+            if int(self.fx_time / 8) % 2 == 0:
+                self.neural_cloud(29, x + 2, size, bottom - 30)
+                self.put(bottom - 1, x + 2, "FLY BRAIN / MOCKUP / [6]", "mint", size)
+            else:
+                self.reactor(29, x + 2, size, bottom - 30)
+                self.put(bottom - 1, x + 2, "4D COPE REACTOR / " + spinner, "mint", size)
             chars = "._-=+#" if self.ascii else "▁▂▃▄▅▆▇█"
             samples = list(self.trace)[-size:]
             self.put(26, x + 2, "".join(chars[min(len(chars) - 1, n * len(chars) // 100)] for n in samples), "red", size)
@@ -404,6 +417,7 @@ class Console:
     def draw(self):
         self.h, self.w = self.screen.getmaxyx()
         self.screen.erase()
+        self.buttons = []
         if self.h < 24 or self.w < 64:
             self.put(0, 0, "LRP // TERMINAL TOO SMALL", "red")
             self.put(2, 0, f"Need 64 x 24. Current: {self.w} x {self.h}.", "mint")
@@ -417,12 +431,16 @@ class Console:
         mode = "CALM" if self.calm else "FROZEN" if self.paused else "LIVE SIM"
         self.put(2, self.w - len(mode) - 2, mode, "amber")
         x = 1
-        for i, name in enumerate(VIEWS):
+        names = VIEWS if self.w >= 80 else ("CTL", "WIRE", "ID", "VAULT", "HELP", "FLY")
+        for i, name in enumerate(names):
             label = f" {i+1} {name} "
-            self.put(3, x, label, "bar" if i == self.view else "dim")
+            self.button(3, x, label, ("home", "feed", "dossier", "vault", "help", "fly")[i], "bar" if i == self.view else "dim")
             x += len(label) + 1
+        if self.w >= 94:
+            self.button(3, self.w - 16, " [f] BROFIST ", "brofist", "alert")
         self.put(4, 1, marquee("/////      /////      /////      /////", self.w - 2, -self.fx_time * 18), "blood" if self.panic else "ghost")
-        (self.control, self.wire, self.dossier, self.vault, self.manual)[self.view]()
+        (self.control, self.wire, self.dossier, self.vault, self.manual, self.flylab)[self.view]()
+        self.brofist_overlay()
         self.line(self.h - 4, 1, self.w - 2)
         self.put(self.h - 3, 1, self.store.error or self.message, "red" if self.store.error else "amber", self.w - 2)
         if self.editing:
@@ -440,7 +458,8 @@ class Console:
             except curses.error:
                 pass
         else:
-            self.put(self.h - 2, 1, "[:] command  [b] Bash  [n] note  [Space] freeze  [?] help  [q] exit", "mint")
+            self.button(self.h - 2, 1, " [f] BROFIST ", "brofist", "alert")
+            self.put(self.h - 2, 15, "[:] cmd [b] Bash [6] fly [Space] freeze [q] exit", "mint")
             self.put(self.h - 1, 1, "CONNECTED TO ABSOLUTELY NOTHING.   ALL PANIC IS LOCALLY SOURCED.", "dim")
             try:
                 curses.curs_set(0)
@@ -466,12 +485,27 @@ class Console:
         cmd, _, arg = raw.strip().partition(" ")
         cmd = cmd.lower()
         arg = clean(arg.strip())
-        views = {"home": 0, "feed": 1, "dossier": 2, "vault": 3, "help": 4}
+        views = {"home": 0, "feed": 1, "dossier": 2, "vault": 3, "help": 4, "fly": 5}
         if cmd in views:
             self.change_view(views[cmd])
             self.message = VIEWS[self.view] + " selected."
         elif cmd in ("quit", "exit", "q"):
             self.running = False
+        elif cmd == "brofist":
+            if self.brofist_started is not None:
+                self.brofist_started = None
+                return
+            self.brofist_started = self.fx_time - (1.2 if self.calm or self.paused else 0)
+            self.fly_stimulus_until = self.fx_time + 7
+            self.store.data["aura"] = min(999999, self.store.data["aura"] + 67)
+            self.message = "BROFIST CONFIRMED. +67 aura. The fly has accepted your friendship."
+            self.log("BRO", self.message)
+            self.save()
+        elif cmd == "stimulate":
+            self.fly_stimulus_until = self.fx_time + 6
+            self.message = "Banana signal delivered. Little guy is absolutely locked in."
+            self.log("FLY", self.message)
+            self.change_view(5)
         elif cmd in ("panic", "contain"):
             self.panic = cmd == "panic"
             self.threat = 99 if self.panic else 43
@@ -597,9 +631,23 @@ class Console:
             self.screen.clearok(True)
         elif self.editing:
             self.edit_key(key)
+        elif key == curses.KEY_MOUSE:
+            try:
+                _, x, y, _, state = curses.getmouse()
+                if state & curses.BUTTON1_PRESSED:
+                    for row, start, end, command in self.buttons:
+                        if row == y and start <= x < end:
+                            if self.brofist_started is not None and command != "brofist":
+                                break
+                            self.command(command)
+                            break
+            except curses.error:
+                pass
+        elif key == "\x1b":
+            self.brofist_started = None
         elif key in ("q", "Q"):
             self.running = False
-        elif isinstance(key, str) and key in "12345":
+        elif isinstance(key, str) and key in "123456":
             self.change_view(int(key) - 1)
         elif key in ("\t", curses.KEY_BTAB):
             self.change_view((self.view + (-1 if key == curses.KEY_BTAB else 1)) % len(VIEWS))
@@ -611,6 +659,10 @@ class Console:
             self.prompt("note ")
         elif key == "p":
             self.command("contain" if self.panic else "panic")
+        elif key == "f":
+            self.command("brofist")
+        elif key == "s" and self.view == 5:
+            self.command("stimulate")
         elif key in ("a", "g", " ", "m", "b"):
             self.command({"a": "aura", "g": "grass", " ": "pause", "m": "calm", "b": "shell"}[key])
         elif key in (curses.KEY_DOWN, curses.KEY_UP, curses.KEY_NPAGE, curses.KEY_PPAGE):
@@ -630,6 +682,21 @@ class Console:
             except curses.error:
                 continue
             self.key(key)
+            # Consume a burst of typed/pasted text before redrawing expensive
+            # animated panels. Preserve command boundaries and normal key handling.
+            if self.editing:
+                self.screen.timeout(0)
+                try:
+                    for _ in range(128):
+                        try:
+                            key = self.screen.get_wch()
+                        except curses.error:
+                            break
+                        self.key(key)
+                        if not self.editing or not self.running:
+                            break
+                finally:
+                    self.screen.timeout(50)
 
 
 def main(argv=None):

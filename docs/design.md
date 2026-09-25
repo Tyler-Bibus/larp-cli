@@ -47,3 +47,10 @@ rotating tesseract. Crashout drives the visual clock at 2.4x speed and floods th
 fictional wire. Input, Space, and calm mode freeze the visual clock. Keep the
 actual host readings and keyboard controls in stable positions. No full-screen
 flashing or bells.
+
+The fly lab adds a fourth motif: an illustrative four-lobe point cloud with moving
+spike activity beside a separate ASCII fly. Four sprite frames animate its wings
+and six legs while it drifts around the enclosure. Banana and brofist actions
+increase the displayed firing activity; neither uses biological data. A brofist
+overlay sends two mirrored ASCII fists inward and expands a star burst from the
+impact. Both keyboard and terminal mouse input activate the same actions.

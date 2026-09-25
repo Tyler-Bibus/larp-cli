@@ -51,8 +51,12 @@ FONT = {
 }
 
 HELP = [
-    ("1 / 2 / 3 / 4 / 5", "Switch: control, wire, dossier, vault, manual"),
+    ("1 / 2 / 3 / 4 / 5 / 6", "Control, wire, dossier, vault, manual, fly lab"),
     ("Tab / Shift-Tab", "Next / previous screen"),
+    ("f / click BROFIST", "Fist bump animation, +67 aura, fly reaction; f/Esc dismiss"),
+    ("6 / :fly", "Mock fly brain and animated ASCII fly"),
+    ("s (in fly lab)", "Feed the fly a fictional banana stimulus"),
+    ("Mouse", "Click tabs or labeled buttons; Shift selects terminal text"),
     ("p", "Trigger / contain a fictional crashout"),
     ("a", "Farm aura; consequences are unpredictable"),
     ("g", "Touch grass; replenish cope and lower threat"),
@@ -67,6 +71,7 @@ HELP = [
     ("COMMANDS", "help / home / feed / dossier / vault / status"),
     ("", "panic / contain / aura / grass / pause / calm"),
     ("", "note <text> / alias <name> / shell / quit"),
+    ("", "fly / brofist / stimulate"),
     ("INPUT", "Esc cancels; arrows edit; Up/Down recall; Ctrl-U clears"),
     ("LOCAL DATA", "Notes, callsign and scores save automatically."),
     ("SIMULATION", "All alerts, feed messages and aura readings are fiction."),

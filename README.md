@@ -9,6 +9,15 @@ waves, scanning beams, torn headline lettering, scrolling warning bands, a live
 waveform, and a rotating 4D cope reactor. Crashout mode accelerates the effects
 and transmission feed; farming aura triggers a temporary shockwave bulletin.
 
+**New: Fly lab and brofists.** Press `6` for a decorative, pulsing fruit-fly brain
+alongside a flapping, walking ASCII fly. Press `s` in the lab to feed it a banana.
+Click **BROFIST**, or press `f`, to animate two fists colliding with an impact burst,
+earn 67 fictional aura, and excite the fly. `f` or `Esc` dismisses the effect.
+In calm or frozen mode, the brofist displays a static impact instead of motion.
+The control room alternates its reactor with a miniature brain preview.
+
+[Watch the fly and brofist animations](docs/fly-brofist.gif)
+
 ![Control room, captured from a real pseudo-terminal](docs/control-room.png)
 
 [Watch the live animation capture](docs/motion-preview.gif)
@@ -26,7 +35,9 @@ replace Bash or start automatically when you open a terminal.
 
 | Key | Action |
 | --- | --- |
-| `1`–`5`, `Tab` | Control room, fictional wire, operator dossier, lore vault, manual |
+| `1`–`6`, `Tab` | Control room, wire, dossier, vault, manual, fly lab |
+| `f`, click **BROFIST** | Fist bump, impact animation, +67 aura, fly reaction |
+| `s` in fly lab | Feed banana; animate a mock neural response |
 | `p` | Trigger or contain a crashout |
 | `a` | Farm aura; sometimes being seen trying loses points |
 | `g` | Touch grass; stabilize the simulation |
@@ -55,6 +66,8 @@ quit
 ```
 
 Other directives: `home`, `feed`, `dossier`, `vault`, `status`, and `pause`.
+Also: `fly`, `brofist`, and `stimulate`. Tabs and labeled buttons accept mouse clicks
+in Konsole; hold Shift to select terminal text normally.
 Only `shell` / `b` launches Bash; fictional directives are not shell commands.
 Bash inherits the launch directory and sets `LRP_SESSION=1`. Changes inside that
 child shell, including `cd` and exported variables, last for that Bash session.
@@ -98,6 +111,12 @@ Uninstalling preserves source and notes. No Konsole settings are changed.
 The clock, host memory/load/uptime, saved notes, and Bash are real. Everything about
 aura, threats, transmissions, intelligence, and alerts is fictional. The program
 makes no network requests. No live Instagram integration is involved.
+
+The fly lab is a visual mockup inspired by the
+[fruit-fly simulation meme](https://knowyourmeme.com/memes/fruit-fly-brain-simulations)
+and [connectome visualizations](https://flywire.ai/gallery). Its 120 generated
+points, connections, firing effects, and ASCII fly movements are purely decorative.
+It loads no neural datasets and makes no claim to simulate a real brain or behavior.
 
 Callsign, aura, launch count, calm preference, and the most recent 200 notes are
 stored in `~/.local/share/lrp/state.json`, or `$XDG_DATA_HOME/lrp/state.json` when set.

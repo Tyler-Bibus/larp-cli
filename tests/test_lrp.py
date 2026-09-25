@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 from lrp import __version__
 from lrp.app import Console, clip, width, wrap
+from lrp.creatures import project_brain
 from lrp.motion import tesseract
 from lrp.state import Store, clean
 
@@ -174,6 +175,32 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(t.finish(), t.original)
             self.assertEqual(t.process.returncode, 0)
 
+    def test_flylab_keyboard_mouse_brofist_and_compact_layout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            t = self.launch(directory, options=("--calm",))
+            state = Path(directory) / "lrp/state.json"
+            self.assertIn(b"MOCK CONNECTOME", t.send("6"))
+            t.send("s")
+            self.assertIn(b"Banana signal delivered", t.output)
+            before = json.loads(state.read_text())["aura"]
+            t.send("f")
+            self.assertEqual(json.loads(state.read_text())["aura"], before + 67)
+            self.assertIn(b"BROFIST PROTOCOL", t.output)
+            t.send("f")  # Dismissal must not award a second bump.
+            self.assertEqual(json.loads(state.read_text())["aura"], before + 67)
+            t.send("\x1b[<0;4;39M")  # Click the footer button in an xterm-compatible terminal.
+            self.assertEqual(json.loads(state.read_text())["aura"], before + 134)
+            t.send("\x1b")
+            t.resize(24, 64)
+            t.send(":brofist\n")
+            t.send("\x1b")
+            t.send("nfly friend fff\n")
+            self.assertEqual(json.loads(state.read_text())["notes"][-1]["text"], "fly friend fff")
+            self.assertEqual(json.loads(state.read_text())["aura"], before + 201)
+            self.assertEqual(t.finish(), t.original)
+            self.assertEqual(t.process.returncode, 0)
+            self.assertNotIn(b"Traceback", t.output)
+
     def test_signal_and_ascii_exit_restore_terminal(self):
         with tempfile.TemporaryDirectory() as directory:
             for termination in ("interrupt", "terminate"):
@@ -217,6 +244,14 @@ class InstallerTests(unittest.TestCase):
 
 
 class AnimationTests(unittest.TestCase):
+    def test_mock_brain_projection_stays_inside_both_layouts(self):
+        for columns, rows in ((32, 3), (66, 24)):
+            before, _ = project_brain(0, columns, rows)
+            after, _ = project_brain(4, columns, rows)
+            self.assertNotEqual(before, after)
+            self.assertEqual(len(before), 120)
+            self.assertTrue(all(0 <= x < columns and 0 <= y < rows for x, y in before + after))
+
     def test_pause_calm_and_input_freeze_then_resume_without_jump(self):
         app = Console.__new__(Console)
         app.last_frame = app.last_host = app.last_tick = app.last_feed = 100.0
