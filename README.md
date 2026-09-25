@@ -4,7 +4,14 @@ A homemade, full-screen terminal operating-system larp. Giant emergency letterin
 mint-green telemetry, a red panic state, and a deeply unqualified fictional
 intelligence feed. Built for Arch Linux + Konsole using only Python's standard library.
 
+The default console now runs a 20 FPS animation loop: falling data, interference
+waves, scanning beams, torn headline lettering, scrolling warning bands, a live
+waveform, and a rotating 4D cope reactor. Crashout mode accelerates the effects
+and transmission feed; farming aura triggers a temporary shockwave bulletin.
+
 ![Control room, captured from a real pseudo-terminal](docs/control-room.png)
+
+[Watch the live animation capture](docs/motion-preview.gif)
 
 ```sh
 lrp
@@ -62,8 +69,9 @@ lrp --doctor    # Terminal and installation diagnostics
 lrp --version
 ```
 
-No flashing screen or terminal bell. Calm mode leaves the real clock and host
-readings active; Space pauses the fictional simulation for the current session.
+No full-screen flashing or terminal bell. Calm mode leaves the real clock and host
+readings active; Space freezes the simulation and all effects for the current
+session. Animation also freezes while you type a command or note.
 
 ## Install or remove
 

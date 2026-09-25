@@ -14,8 +14,12 @@ import tempfile
 import termios
 import time
 import unittest
+from collections import deque
+from unittest.mock import patch
 
-from lrp.app import clip, width, wrap
+from lrp import __version__
+from lrp.app import Console, clip, width, wrap
+from lrp.motion import tesseract
 from lrp.state import Store, clean
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -204,12 +208,54 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(launcher.resolve(), ROOT / "bin/lrp")
             self.assertEqual(installer().returncode, 0)
             version = subprocess.run([str(launcher), "--version"], env=env, capture_output=True, text=True)
-            self.assertEqual(version.stdout.strip(), "lrp 1.0.0")
+            self.assertEqual(version.stdout.strip(), "lrp " + __version__)
             self.assertEqual(installer("--uninstall").returncode, 0)
             self.assertFalse(launcher.exists())
             launcher.write_text("existing unrelated command")
             self.assertEqual(installer().returncode, 1)
             self.assertEqual(launcher.read_text(), "existing unrelated command")
+
+
+class AnimationTests(unittest.TestCase):
+    def test_pause_calm_and_input_freeze_then_resume_without_jump(self):
+        app = Console.__new__(Console)
+        app.last_frame = app.last_host = app.last_tick = app.last_feed = 100.0
+        app.fx_time = 0.0
+        app.paused = app.calm = app.editing = app.panic = False
+        app.phase, app.threat, app.cope = 0, 86, 34
+        app.trace = deque(maxlen=120)
+        app.log = lambda *args: None
+        app.read_host = lambda: {}
+        app.view = app.offset = 0
+        with patch("lrp.app.time.monotonic", return_value=100.05):
+            app.update()
+        self.assertGreater(app.fx_time, 0)
+        for flag, now in (("paused", 101), ("calm", 102), ("editing", 103)):
+            before = app.fx_time
+            setattr(app, flag, True)
+            with patch("lrp.app.time.monotonic", return_value=now):
+                app.update()
+            self.assertEqual(app.fx_time, before)
+            setattr(app, flag, False)
+        before = app.fx_time
+        with patch("lrp.app.time.monotonic", return_value=103.05):
+            app.update()
+        self.assertAlmostEqual(app.fx_time - before, .05)
+        app.panic = True
+        before = app.fx_time
+        with patch("lrp.app.time.monotonic", return_value=103.10):
+            app.update()
+        self.assertGreater(app.fx_time - before, .1)
+
+    def test_rotating_geometry_stays_inside_small_and_large_panels(self):
+        for columns, rows in ((8, 3), (34, 5), (54, 24)):
+            frames = []
+            for seconds in (0, .5, 1.5, 20, 1000):
+                points, edges = tesseract(seconds, columns, rows)
+                frames.append(points)
+                self.assertTrue(all(0 <= x < columns and 0 <= y < rows for x, y in points))
+                self.assertEqual(len(edges), 32)
+            self.assertNotEqual(frames[0], frames[2])
 
 
 if __name__ == "__main__":

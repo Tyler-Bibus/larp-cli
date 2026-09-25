@@ -8,7 +8,10 @@ import unicodedata
 
 
 def clean(text):
-    return "".join(c for c in str(text) if not unicodedata.category(c).startswith("C"))
+    text = str(text)
+    if text.isprintable():
+        return text
+    return "".join(c for c in text if not unicodedata.category(c).startswith("C"))
 
 
 def state_path():

@@ -4,7 +4,9 @@ import argparse
 from collections import deque
 import curses
 from datetime import datetime
+from functools import lru_cache
 import locale
+import math
 import os
 import platform
 import random
@@ -17,19 +19,27 @@ import unicodedata
 
 from . import __version__
 from .content import FONT, HELP, TRANSMISSIONS
+from .motion import marquee, segment, tesseract
 from .state import Store, clean, state_path
 
 
+@lru_cache(maxsize=1024)
+def cell_width(char):
+    return 0 if unicodedata.combining(char) else 2 if unicodedata.east_asian_width(char) in "WF" else 1
+
+
 def width(text):
-    return sum(0 if unicodedata.combining(c) else 2 if unicodedata.east_asian_width(c) in "WF" else 1
-               for c in text)
+    return len(text) if text.isascii() else sum(map(cell_width, text))
 
 
 def clip(text, limit):
+    text = clean(text)
+    if text.isascii():
+        return text[:max(0, limit)]
     result = ""
     used = 0
-    for char in clean(text):
-        size = width(char)
+    for char in text:
+        size = cell_width(char)
         if used + size > limit:
             break
         result += char
@@ -70,6 +80,9 @@ class Console:
         self.started = time.monotonic()
         self.last_tick = self.started
         self.last_feed = self.started
+        self.last_frame = self.started
+        self.fx_time = 0.0
+        self.burst_until = 0.0
         self.last_host = 0
         self.boot_until = self.started + (0 if args.no_boot or self.calm else 1.6)
         self.threat = 86
@@ -97,20 +110,20 @@ class Console:
 
     def setup(self):
         self.screen.keypad(True)
-        self.screen.timeout(100)
+        self.screen.timeout(50)
         curses.set_escdelay(25)
         try:
             curses.curs_set(0)
         except curses.error:
             pass
-        self.styles = {k: curses.A_NORMAL for k in ("mint", "red", "dim", "amber", "white", "bar", "alert", "soft")}
+        self.styles = {k: curses.A_NORMAL for k in ("mint", "red", "dim", "amber", "white", "bar", "alert", "soft", "ghost", "blood")}
         if curses.has_colors():
             curses.start_color()
             if curses.COLORS >= 256:
                 colors = [(121, 16), (197, 16), (66, 16), (221, 16), (195, 16),
-                          (16, 121), (16, 197), (121, 23)]
+                          (16, 121), (16, 197), (121, 23), (23, 16), (52, 16)]
             else:
-                colors = [(2, 0), (1, 0), (6, 0), (3, 0), (7, 0), (0, 2), (7, 1), (2, 0)]
+                colors = [(2, 0), (1, 0), (6, 0), (3, 0), (7, 0), (0, 2), (7, 1), (2, 0), (6, 0), (1, 0)]
             for number, (name, pair) in enumerate(zip(self.styles, colors), 1):
                 curses.init_pair(number, *pair)
                 self.styles[name] = curses.color_pair(number)
@@ -163,8 +176,49 @@ class Console:
             return
         left = x + (span - size) // 2
         block = "#" if self.ascii else "█"
+        frame = int(self.fx_time * 20)
+        tearing = not self.calm and frame % (37 if self.panic else 89) < (8 if self.panic else 5)
         for row, pixels in enumerate(raster):
-            self.put(y + row, left, "".join((block if p == "1" else " ") * scale for p in pixels), "red")
+            shift = (row % 3 - 1) * (2 if self.panic else 1) if tearing else 0
+            shifted = max(x + 1, min(x + span - size - 1, left + shift))
+            self.put(y + row, shifted, "".join((block if p == "1" else " ") * scale for p in pixels), "red")
+        # A thin mint scan travels through the red lettering; no screen-wide flash.
+        sweep = frame % 70
+        if sweep < 5 and not self.calm:
+            pixels = raster[sweep]
+            self.put(y + sweep, left, "".join(("=" if self.ascii else "▄") * scale if p == "1" else " " * scale for p in pixels), "mint")
+
+    def reactor(self, y, x, columns, rows):
+        if columns < 8 or rows < 3:
+            return
+        seconds = self.fx_time
+        points, edges = tesseract(seconds, columns, rows)
+        for a, b, axis in edges:
+            glyph = ":" if axis == 3 else "."
+            for px, py in segment(points[a], points[b]):
+                self.put(y + py, x + px, glyph, "red" if axis == 3 else "dim")
+        for i, (px, py) in enumerate(points):
+            self.put(y + py, x + px, "+" if self.ascii else "◆", "red" if i % 4 == 0 else "mint")
+
+    def interference(self, span):
+        """Moving carrier noise, falling packets, wave traces, and tracking beams."""
+        frame = int(self.fx_time * 20)
+        for column in range(3, span - 3, 7):
+            head = (frame // (2 + column % 3) + column * 13) % 15
+            for trail in range(4):
+                row = 5 + (head - trail) % 15
+                glyph = "01:/+"[(frame // 3 + column + trail) % 5]
+                self.put(row, column, glyph, "dim" if trail == 0 else "ghost")
+        scan = 7 + frame // 3 % 12
+        self.line(scan, 2, span - 4, "blood" if self.panic else "ghost")
+        for column in range(2, span - 2):
+            amplitude = math.sin(column * .16 + self.fx_time * 4)
+            row = 11 + round(amplitude * 6 * math.sin(column * .035 - self.fx_time))
+            self.put(row, column, "." if self.ascii else "·", "blood" if self.panic else "ghost")
+        # Crossing acquisition brackets around the central warning.
+        pos = frame * 2 % max(1, span - 16)
+        self.put(7, 3 + pos, "[>>>]", "red")
+        self.put(18, max(2, span - 8 - pos), "[<<<]", "mint")
 
     def log(self, tag, text):
         self.logs.append((datetime.now().strftime("%H:%M:%S"), tag, clean(text)))
@@ -175,19 +229,22 @@ class Console:
 
     def update(self):
         now = time.monotonic()
+        elapsed = min(.15, now - self.last_frame)
+        self.last_frame = now
         if now - self.last_host >= 3:
             self.last_host = now
             self.host = self.read_host()
         if self.paused or self.calm or self.editing:
             self.last_tick = self.last_feed = now
             return
-        if now - self.last_tick >= .55:
+        self.fx_time += elapsed * (2.4 if self.panic else 1.0)
+        if now - self.last_tick >= .12:
             self.phase += 1
             self.last_tick = now
             self.threat = max(5, min(99, self.threat + random.randint(-3, 4)))
             self.cope = max(1, min(100, self.cope + random.randint(-2, 2)))
             self.trace.append(random.randrange(20, 100) if self.panic else random.randrange(10, 85))
-        if now - self.last_feed >= (1.1 if self.panic else 2.8):
+        if now - self.last_feed >= (.18 if self.panic else .65):
             self.last_feed = now
             if self.view == 1 and self.offset:
                 self.offset = min(len(self.logs), self.offset + 1)
@@ -219,8 +276,9 @@ class Console:
         self.put(y + 1, x, "[" + ("#" if self.ascii else "━") * count + "·" * (blocks - count) + "]", style, size)
 
     def control(self):
-        wide = self.w >= 108
+        wide = self.w >= 108 and self.h >= 26
         span = self.w - 33 if wide else self.w
+        self.interference(span)
         status = "CRITICAL" if self.panic else "COOKED" if self.threat >= 65 else "LOCKED IN"
         self.center(5, "REPORT ON TERMINAL AURA DISCHARGE", "mint", 0, span)
         self.center(6, "SUBJECT: YOU   /   CLASSIFICATION: EXTREMELY ONLINE", "dim", 0, span)
@@ -229,7 +287,13 @@ class Console:
         self.center(15, "POSSIBLE SIMILARITY WITH A SKILL ISSUE", "mint", 0, span)
         label = "CONTAINMENT FAILED" if self.panic else "RECALCULATING" if self.threat >= 65 else "WE ARE SO BACK"
         self.fill(17, 2, span - 4, "alert")
-        self.center(17, "// " + label + " //", "alert", 2, span - 4)
+        self.put(17, 2, marquee("/// " + label + " /// " + label, span - 4, self.fx_time * 16), "alert", span - 4)
+        spinner = "|/-\\"[int(self.fx_time * 8) % 4]
+        warning = "AURA FIELD COLLAPSE" if self.panic else "REALITY SYNC RETRY"
+        countdown = 999 - int(self.fx_time * 37) % 1000
+        self.center(16, f" {spinner} {warning} / {countdown:03d} / SIGNAL UNSTABLE {spinner} ", "amber", 0, span)
+        if self.fx_time < self.burst_until:
+            self.center(18, " >> AURA SHOCKWAVE // THE TIMELINE FELT THAT << ", "red", 0, span)
         self.center(19, "[p] crashout / contain   [a] farm aura   [g] touch grass", "amber", 0, span)
         if wide:
             x, panel = span + 1, 31
@@ -243,6 +307,8 @@ class Console:
                 self.put(7 + idx * 2, x + 2, val, "white", panel - 4)
             self.put(17, x + 2, "[b] enter real Bash", "amber", panel - 4)
             self.put(19, x + 2, "NETWORK: OFFLINE BY DESIGN", "mint", panel - 4)
+        if self.h >= 28:
+            self.put(21, 2, marquee(" +++ THE ALGORITHM IS WATCHING YOU LARP +++ LOCK IN +++ DO NOT PERCEIVE THE REACTOR +++", self.w - 4, -self.fx_time * 11), "red", self.w - 4)
         bottom = self.h - 5
         if bottom < 24:
             return
@@ -258,15 +324,17 @@ class Console:
         size = self.w - x - 5
         if bottom >= 26:
             self.meter(24, x + 2, size, "THREAT", self.threat, "red")
-        if bottom >= 29:
+        if bottom >= 29 and bottom < 35:
             self.meter(27, x + 2, size, "COPE RESERVE", self.cope, "mint")
-        if bottom >= 32:
+        if bottom >= 32 and bottom < 35:
             self.put(30, x + 2, f"AURA BALANCE  {self.store.data['aura']:+,}", "amber", size)
         if bottom >= 35:
+            self.put(27, x + 2, f"COPE {self.cope:02}% / AURA {self.store.data['aura']:+,}", "amber", size)
+            self.reactor(29, x + 2, size, bottom - 30)
+            self.put(bottom - 1, x + 2, "4D COPE REACTOR / " + spinner, "mint", size)
             chars = "._-=+#" if self.ascii else "▁▂▃▄▅▆▇█"
             samples = list(self.trace)[-size:]
-            self.put(33, x + 2, "".join(chars[min(len(chars) - 1, n * len(chars) // 100)] for n in samples), "red", size)
-            self.put(34, x + 2, "A.T. FIELD / ABSOLUTE TERMINAL", "dim", size)
+            self.put(26, x + 2, "".join(chars[min(len(chars) - 1, n * len(chars) // 100)] for n in samples), "red", size)
 
     def scroll_lines(self, rows):
         visible = max(1, self.h - 13)
@@ -344,7 +412,7 @@ class Console:
             return
         self.fill(0, 0, self.w, "bar", " LRP / REALITY OPERATIONS DIVISION")
         self.put(0, self.w - 22, datetime.now().strftime("%Y-%m-%d  %H:%M:%S"), "bar")
-        self.put(1, 1, "EMERGENCY BROADCAST SYSTEM   //   REALITY IS A SKILL ISSUE", "red")
+        self.put(1, 1, marquee("EMERGENCY BROADCAST SYSTEM // REALITY IS A SKILL ISSUE // AURA CONTAINMENT BREACH", self.w - 2, self.fx_time * 12), "red")
         self.put(2, 1, "LOCAL CONSOLE / FICTIONAL THREAT TRAFFIC", "dim")
         mode = "CALM" if self.calm else "FROZEN" if self.paused else "LIVE SIM"
         self.put(2, self.w - len(mode) - 2, mode, "amber")
@@ -353,6 +421,7 @@ class Console:
             label = f" {i+1} {name} "
             self.put(3, x, label, "bar" if i == self.view else "dim")
             x += len(label) + 1
+        self.put(4, 1, marquee("/////      /////      /////      /////", self.w - 2, -self.fx_time * 18), "blood" if self.panic else "ghost")
         (self.control, self.wire, self.dossier, self.vault, self.manual)[self.view]()
         self.line(self.h - 4, 1, self.w - 2)
         self.put(self.h - 3, 1, self.store.error or self.message, "red" if self.store.error else "amber", self.w - 2)
@@ -410,6 +479,7 @@ class Console:
             self.log("FAULT" if self.panic else "COPE", self.message)
             self.change_view(0)
         elif cmd == "aura":
+            self.burst_until = self.fx_time + 3.0
             delta = random.choice([-400, -67, 67, 100, 200, 670])
             self.store.data["aura"] = max(-999999, min(999999, self.store.data["aura"] + delta))
             self.message = f"AURA {delta:+d}. " + ("The pose was witnessed." if delta > 0 else "They saw you trying. It's over.")
@@ -471,10 +541,11 @@ class Console:
         finally:
             curses.reset_prog_mode()
             self.screen.keypad(True)
-            self.screen.timeout(100)
+            self.screen.timeout(50)
             self.screen.clearok(True)
             self.screen.refresh()
             self.last_tick = self.last_feed = time.monotonic()
+            self.last_frame = self.last_tick
 
     def edit_key(self, key):
         if key == "\x1b":

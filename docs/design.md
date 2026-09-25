@@ -38,6 +38,12 @@ command line / key hints
 
 Review against the brief: terminal-native, panic-red and mint rather than generic
 hacker green; an emergency bulletin is the primary shape, not uniform dashboard
-cards. Deliberate all-caps mimic the supplied visual reference. Motion changes only
-local readings and the transmission feed; no full-screen flashing or bells. Calm
-mode preserves the visual direction without automatic simulation updates.
+cards. Deliberate all-caps mimic the supplied visual reference.
+
+The second pass deliberately increases chaos: 20 FPS falling carrier packets,
+crossing acquisition brackets, two counter-scrolling warning tapes, a scanning
+headline with short horizontal tearing bursts, waveform interference, and a
+rotating tesseract. Crashout drives the visual clock at 2.4x speed and floods the
+fictional wire. Input, Space, and calm mode freeze the visual clock. Keep the
+actual host readings and keyboard controls in stable positions. No full-screen
+flashing or bells.
