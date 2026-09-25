@@ -18,6 +18,7 @@ from collections import deque
 from unittest.mock import patch
 
 from lrp import __version__
+from lrp.arcade import FlyDoom
 from lrp.app import Console, clip, width, wrap
 from lrp.creatures import project_brain
 from lrp.motion import tesseract
@@ -215,6 +216,25 @@ class TerminalTests(unittest.TestCase):
                     self.assertEqual(restored, t.original)
                     self.assertEqual(t.process.returncode, 0)
 
+    def test_doom_button_swaps_fly_pane_and_kitty_can_be_petted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            t = self.launch(directory, options=("--calm",))
+            t.send("6")
+            t.send("\x1b[<0;42;35M")  # PLAY DOOM button.
+            self.assertIn(b"autoplay engaged", t.output)
+            self.assertIn(b"FLY DOOM / MOCK", t.output)
+            t.send("k")
+            self.assertIn(b"emotional support human", t.output)
+            t.send("d")
+            self.assertIn(b"Fly returned to its enclosure", t.output)
+            t.resize(24, 64)
+            t.send(":doom\n")
+            t.send("k")
+            t.send("d")
+            self.assertEqual(t.finish(), t.original)
+            self.assertEqual(t.process.returncode, 0)
+            self.assertNotIn(b"Traceback", t.output)
+
     def test_redirected_launch_gives_actionable_error(self):
         result = subprocess.run([sys.executable, "-m", "lrp"], cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 1)
@@ -244,6 +264,23 @@ class InstallerTests(unittest.TestCase):
 
 
 class AnimationTests(unittest.TestCase):
+    def test_autoplay_scene_moves_and_fly_portrait_has_four_expressions(self):
+        game = FlyDoom()
+        original = game.scene(43, 17)
+        expressions = set()
+        for moment in (0, .7, 2.2, 4.2):
+            game.time = moment
+            expressions.add(game.expression)
+            self.assertTrue(0 < game.health <= 100)
+        self.assertEqual(expressions, {"LOCKED IN", "PEW PEW", "OUCH", "RIP & BUZZ"})
+        self.assertNotEqual(game.scene(43, 17), original)
+        game.advance(10)
+        self.assertGreater(game.kills, 0)
+        for columns, rows in ((22, 3), (43, 17), (80, 30)):
+            scene = game.scene(columns, rows)
+            self.assertEqual(len(scene), rows)
+            self.assertTrue(all(len(line) == columns for line in scene))
+
     def test_mock_brain_projection_stays_inside_both_layouts(self):
         for columns, rows in ((32, 3), (66, 24)):
             before, _ = project_brain(0, columns, rows)
@@ -261,26 +298,34 @@ class AnimationTests(unittest.TestCase):
         app.trace = deque(maxlen=120)
         app.log = lambda *args: None
         app.read_host = lambda: {}
-        app.view = app.offset = 0
+        app.view, app.offset = 5, 0
+        app.doom_enabled = True
+        app.doom = FlyDoom()
         with patch("lrp.app.time.monotonic", return_value=100.05):
             app.update()
         self.assertGreater(app.fx_time, 0)
         for flag, now in (("paused", 101), ("calm", 102), ("editing", 103)):
             before = app.fx_time
+            game_before = app.doom.time
             setattr(app, flag, True)
             with patch("lrp.app.time.monotonic", return_value=now):
                 app.update()
             self.assertEqual(app.fx_time, before)
+            self.assertEqual(app.doom.time, game_before)
             setattr(app, flag, False)
         before = app.fx_time
         with patch("lrp.app.time.monotonic", return_value=103.05):
             app.update()
         self.assertAlmostEqual(app.fx_time - before, .05)
+        self.assertAlmostEqual(app.doom.time, .1)
+        app.view = 0
+        game_before = app.doom.time
         app.panic = True
         before = app.fx_time
         with patch("lrp.app.time.monotonic", return_value=103.10):
             app.update()
         self.assertGreater(app.fx_time - before, .1)
+        self.assertEqual(app.doom.time, game_before)
 
     def test_rotating_geometry_stays_inside_small_and_large_panels(self):
         for columns, rows in ((8, 3), (34, 5), (54, 24)):

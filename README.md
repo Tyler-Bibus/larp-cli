@@ -18,6 +18,19 @@ The control room alternates its reactor with a miniature brain preview.
 
 [Watch the fly and brofist animations](docs/fly-brofist.gif)
 
+**Fly Doom:** in the fly lab, click **PLAY DOOM** or press `d`. A tiny original
+Doom-style autoplay scene replaces only the ASCII fly's pane: moving raycast
+corridors, an imp, muzzle flashes, health, and kills. The HUD portrait is the fly,
+with focused, firing, hurt, and happy faces. Click **RETURN FLY** or press `d` again
+to restore its enclosure. This is a procedural mockup, not the Doom engine; no
+WADs, downloads, or original game assets are included. Autoplay pauses when you
+leave the fly lab, freeze the console, use calm mode, or type a command.
+
+[Watch Fly Doom](docs/fly-doom.gif) · [Meet the kitty](docs/kitty.png)
+
+A blinking, tail-swishing kitty lives in the footer and control room. Press `k`
+or click the kitty to pet it and get happy eyes and purrs.
+
 ![Control room, captured from a real pseudo-terminal](docs/control-room.png)
 
 [Watch the live animation capture](docs/motion-preview.gif)
@@ -38,6 +51,8 @@ replace Bash or start automatically when you open a terminal.
 | `1`–`6`, `Tab` | Control room, wire, dossier, vault, manual, fly lab |
 | `f`, click **BROFIST** | Fist bump, impact animation, +67 aura, fly reaction |
 | `s` in fly lab | Feed banana; animate a mock neural response |
+| `d` in fly lab, click **PLAY DOOM** | Toggle fly Doom autoplay / ASCII fly |
+| `k`, click kitty | Pet your animated kitty companion |
 | `p` | Trigger or contain a crashout |
 | `a` | Farm aura; sometimes being seen trying loses points |
 | `g` | Touch grass; stabilize the simulation |
@@ -66,7 +81,7 @@ quit
 ```
 
 Other directives: `home`, `feed`, `dossier`, `vault`, `status`, and `pause`.
-Also: `fly`, `brofist`, and `stimulate`. Tabs and labeled buttons accept mouse clicks
+Also: `fly`, `brofist`, `stimulate`, `doom`, and `kitty`. Tabs and labeled buttons accept mouse clicks
 in Konsole; hold Shift to select terminal text normally.
 Only `shell` / `b` launches Bash; fictional directives are not shell commands.
 Bash inherits the launch directory and sets `LRP_SESSION=1`. Changes inside that

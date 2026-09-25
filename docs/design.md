@@ -54,3 +54,10 @@ and six legs while it drifts around the enclosure. Banana and brofist actions
 increase the displayed firing activity; neither uses biological data. A brofist
 overlay sends two mirrored ASCII fists inward and expands a star burst from the
 impact. Both keyboard and terminal mouse input activate the same actions.
+
+Fly Doom replaces the fly enclosure in place. The neighboring mock brain stays
+visible. A procedural ASCII raycaster creates scrolling brick corridors with an
+original imp sprite and weapon animation. A compact bottom HUD carries the fly's
+four facial expressions, health, and kill counter. The minimum-size layout uses a
+one-line face. The kitty remains visible in the footer, with a larger three-line
+sprite in the control room; petting changes its eyes and adds a purr.

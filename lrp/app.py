@@ -18,6 +18,7 @@ import time
 import unicodedata
 
 from . import __version__
+from .arcade import ArcadePanels, FlyDoom
 from .content import FONT, HELP, TRANSMISSIONS
 from .creatures import CreaturePanels
 from .motion import marquee, segment, tesseract
@@ -65,11 +66,11 @@ def wrap(text, limit):
 
 
 COMMANDS = ("help", "home", "feed", "dossier", "vault", "status", "panic", "contain",
-            "aura", "grass", "pause", "calm", "note", "alias", "shell", "quit", "fly", "brofist", "stimulate")
+            "aura", "grass", "pause", "calm", "note", "alias", "shell", "quit", "fly", "brofist", "stimulate", "doom", "kitty")
 VIEWS = ("CONTROL", "WIRE", "DOSSIER", "VAULT", "MANUAL", "FLYLAB")
 
 
-class Console(CreaturePanels):
+class Console(CreaturePanels, ArcadePanels):
     def __init__(self, screen, args, store):
         self.screen, self.args, self.store = screen, args, store
         self.running = True
@@ -85,6 +86,9 @@ class Console(CreaturePanels):
         self.fx_time = 0.0
         self.burst_until = 0.0
         self.fly_stimulus_until = 0.0
+        self.kitty_petted_until = 0.0
+        self.doom_enabled = False
+        self.doom = FlyDoom()
         self.brofist_started = None
         self.buttons = []
         self.last_host = 0
@@ -247,6 +251,8 @@ class Console(CreaturePanels):
             self.last_tick = self.last_feed = now
             return
         self.fx_time += elapsed * (2.4 if self.panic else 1.0)
+        if getattr(self, "doom_enabled", False) and self.view == 5:
+            self.doom.advance(elapsed)
         if now - self.last_tick >= .12:
             self.phase += 1
             self.last_tick = now
@@ -314,8 +320,8 @@ class Console(CreaturePanels):
                                                 ("UPTIME", self.host.get("uptime", "")))):
                 self.put(6 + idx * 2, x + 2, label, "dim", panel - 4)
                 self.put(7 + idx * 2, x + 2, val, "white", panel - 4)
-            self.put(17, x + 2, "[b] enter real Bash", "amber", panel - 4)
-            self.put(19, x + 2, "NETWORK: OFFLINE BY DESIGN", "mint", panel - 4)
+            self.kitty(16, x + 2, panel - 4)
+            self.button(19, x + 2, " [k] pet kitty ", "kitty", "dim")
         if self.h >= 28:
             self.put(21, 2, marquee(" +++ THE ALGORITHM IS WATCHING YOU LARP +++ LOCK IN +++ DO NOT PERCEIVE THE REACTOR +++", self.w - 4, -self.fx_time * 11), "red", self.w - 4)
         bottom = self.h - 5
@@ -460,7 +466,8 @@ class Console(CreaturePanels):
         else:
             self.button(self.h - 2, 1, " [f] BROFIST ", "brofist", "alert")
             self.put(self.h - 2, 15, "[:] cmd [b] Bash [6] fly [Space] freeze [q] exit", "mint")
-            self.put(self.h - 1, 1, "CONNECTED TO ABSOLUTELY NOTHING.   ALL PANIC IS LOCALLY SOURCED.", "dim")
+            self.put(self.h - 1, 1, "CONNECTED TO ABSOLUTELY NOTHING.   ALL PANIC IS LOCALLY SOURCED.", "dim", self.w - 24)
+            self.kitty_button()
             try:
                 curses.curs_set(0)
             except curses.error:
@@ -491,6 +498,17 @@ class Console(CreaturePanels):
             self.message = VIEWS[self.view] + " selected."
         elif cmd in ("quit", "exit", "q"):
             self.running = False
+        elif cmd == "doom":
+            self.doom_enabled = not self.doom_enabled
+            if self.doom_enabled:
+                self.doom = FlyDoom()
+            self.change_view(5)
+            self.message = "FLY DOOM: autoplay engaged. [d] returns to the fly." if self.doom_enabled else "Fly returned to its enclosure. Still thinking about Doom."
+            self.log("FLY", self.message)
+        elif cmd == "kitty":
+            self.kitty_petted_until = self.fx_time + 6
+            self.message = "Kitty: purrrrr <3  You have been selected as the emotional support human."
+            self.log("KITTY", "mrrp. <3")
         elif cmd == "brofist":
             if self.brofist_started is not None:
                 self.brofist_started = None
@@ -663,6 +681,10 @@ class Console(CreaturePanels):
             self.command("brofist")
         elif key == "s" and self.view == 5:
             self.command("stimulate")
+        elif key == "d" and self.view == 5:
+            self.command("doom")
+        elif key == "k":
+            self.command("kitty")
         elif key in ("a", "g", " ", "m", "b"):
             self.command({"a": "aura", "g": "grass", " ": "pause", "m": "calm", "b": "shell"}[key])
         elif key in (curses.KEY_DOWN, curses.KEY_UP, curses.KEY_NPAGE, curses.KEY_PPAGE):

@@ -69,7 +69,7 @@ class CreaturePanels:
             return
         points, edges = project_brain(self.fx_time, columns, rows)
         tick = int(self.fx_time * 9)
-        excited = self.fx_time < self.fly_stimulus_until
+        excited = self.fx_time < self.fly_stimulus_until or (self.doom_enabled and self.doom.firing)
         # Batch the field into rows; only bright spikes need individual writes.
         grid = [[" " for _ in range(columns)] for _ in range(rows)]
         for a, b in edges:
@@ -99,8 +99,10 @@ class CreaturePanels:
         panel_h = end - 9
         self.box(9, 1, panel_h, split - 2, "BRAIN / MOCKUP")
         self.neural_cloud(11, 3, split - 6, max(3, panel_h - 4))
-        self.box(9, split, panel_h, self.w - split - 1, "ASCII FLY")
-        if panel_h >= 11:
+        self.box(9, split, panel_h, self.w - split - 1, "FLY DOOM / MOCK" if self.doom_enabled else "ASCII FLY")
+        if self.doom_enabled:
+            self.doom_panel(10, split + 2, self.w - split - 5, panel_h - 2)
+        elif panel_h >= 11:
             self.fly_sprite(11, split + 2, self.w - split - 5, panel_h - 4)
         else:
             # A compact, animated fly for the minimum 64 x 24 terminal.
@@ -109,11 +111,14 @@ class CreaturePanels:
             self.center(12, r" /|\ ", "dim", split + 2, self.w - split - 5)
         label = "DOPAMINE: BRO DETECTED" if self.fx_time < self.fly_stimulus_until else (
             "THOUGHT: BANANA" if int(self.fx_time / 3) % 2 else "THOUGHT: CAN I RUN DOOM?")
+        if self.doom_enabled:
+            label = "THOUGHT: RIP AND BUZZ / " + self.doom.expression
         self.put(end, 3, label, "amber", self.w - 6)
         raster = "".join("|" if (i * 17 + int(self.fx_time * 12)) % 29 < 4 else "." for i in range(self.w - 6))
         self.put(end + 1, 3, raster, "red", self.w - 6)
         self.button(self.h - 6, 3, " [f] BROFIST ", "brofist", "alert")
         self.button(self.h - 6, 19, " [s] FEED BANANA ", "stimulate")
+        self.button(self.h - 6, 38, " [d] RETURN FLY " if self.doom_enabled else " [d] PLAY DOOM ", "doom", "alert")
         self.put(self.h - 5, 3, "120 imaginary nodes / zero actual fly neurons / 100% little guy", "dim", self.w - 6)
 
     def brofist_overlay(self):
