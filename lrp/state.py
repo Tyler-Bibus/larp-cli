@@ -24,7 +24,8 @@ class Store:
         self.path = Path(path) if path is not None else state_path()
         self.error = ""
         self.blocked = False
-        self.data = {"callsign": "OPERATOR", "aura": 670, "sessions": 0, "notes": [], "calm": False}
+        self.data = {"callsign": "OPERATOR", "aura": 670, "sessions": 0, "notes": [], "calm": False,
+                     "bananas": 0, "agents": 64, "audits": 0, "brofists": 0, "cases": 0}
         try:
             if self.path.exists():
                 if self.path.stat().st_size > 2_000_000:
@@ -36,6 +37,11 @@ class Store:
                     if type(raw.get(key, self.data[key])) is not int:
                         raise ValueError(f"invalid {key}")
                     self.data[key] = max(-999999, min(999999, raw.get(key, self.data[key])))
+                for key in ("bananas", "agents", "audits", "brofists", "cases"):
+                    value = raw.get(key, self.data[key])
+                    if type(value) is not int:
+                        raise ValueError(f"invalid {key}")
+                    self.data[key] = max(64 if key == "agents" else 0, min(999999, value))
                 self.data["callsign"] = clean(raw.get("callsign", "OPERATOR"))[:24] or "OPERATOR"
                 self.data["calm"] = raw.get("calm") is True
                 notes = raw.get("notes", [])

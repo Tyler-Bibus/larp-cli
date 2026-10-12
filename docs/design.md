@@ -61,3 +61,27 @@ original imp sprite and weapon animation. A compact bottom HUD carries the fly's
 four facial expressions, health, and kill counter. The minimum-size layout uses a
 one-line face. The kitty remains visible in the footer, with a larger three-line
 sprite in the control room; petting changes its eyes and adds a purr.
+
+The control room replaces its lower wire preview with an autonomous graph
+cascade. Each connected cloud has 22–26 scattered nodes with local cross-links
+and cycles, without a root or hierarchical rows. Real BFS or DFS is randomly
+selected each sweep, with one node visited every 55 ms and only 180 ms between
+clouds. Crashout accelerates it by 1.8x. Dark mesh connections sit behind bright
+red-to-mint traversal trails, racing white packets, and bracketed node flashes.
+An emergency ticker replaces the old tutorial and manual search controls.
+The emergency headline, host readings, and telemetry remain at 90 x 40 or larger
+(host readings need 108 columns). Smaller terminals give the graph the main
+content area. Space, calm mode, input, and leaving Control freeze the cascade.
+
+The cascade now reconstructs harmless messages for the Overthinking Accelerator:
+each regenerated graph proposes another interpretation without clarification.
+Operations is a seventh screen for the overfunded agency. Its red-framed stage
+shows colliding motivation/deadline labels, an aura audit scanner, a meeting swarm,
+and rotating dimensional cable storage. Receipts remain stable below the stage;
+at less than 30 rows the receipt takes priority and wraps with scroll controls.
+Nonchalance slows visual motion and changes the headline to UNBOTHERED, then fails
+after 12 active seconds. Case transmissions advance in order at 3.2-second
+intervals without random feed interruptions. Input, calm mode, and Space freeze
+all experiment/case clocks; explicit commands still work and `incident next`
+provides a static way to read every beat. The fly's banana-funded promotions save
+locally. Petting kitty invokes its absolute fictional shutdown authority.

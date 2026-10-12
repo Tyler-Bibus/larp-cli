@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import pty
+import random
 import select
 import signal
 import struct
@@ -15,20 +16,23 @@ import termios
 import time
 import unittest
 from collections import deque
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from lrp import __version__
 from lrp.arcade import FlyDoom
+from lrp.bureau import Bureau
 from lrp.app import Console, clip, width, wrap
 from lrp.creatures import project_brain
 from lrp.motion import tesseract
+from lrp.search import GraphSearch, SearchPanels
 from lrp.state import Store, clean
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class Terminal:
-    def __init__(self, directory, rows=40, cols=120, options=()):
+    def __init__(self, directory, rows=40, cols=120, options=(), launcher=None):
         self.master, self.slave = pty.openpty()
         self.original = termios.tcgetattr(self.slave)
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
@@ -41,7 +45,8 @@ class Terminal:
             os.setsid()
             fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
-        self.process = subprocess.Popen([sys.executable, "-m", "lrp", "--no-boot", *options],
+        command = [str(launcher)] if launcher else [sys.executable, "-m", "lrp"]
+        self.process = subprocess.Popen([*command, "--no-boot", *options],
                                         cwd=ROOT, env=env, stdin=self.slave, stdout=self.slave,
                                         stderr=self.slave, preexec_fn=session)
         self.output = b""
@@ -176,6 +181,27 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(t.finish(), t.original)
             self.assertEqual(t.process.returncode, 0)
 
+    def test_graph_autoplay_and_compact_layout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            t = self.launch(directory, options=("--ascii",))
+            self.assertIn(b"OVERTHINK ACCELERATOR", t.output)
+            t.read(1.8)
+            t.send(" ")  # Freeze the running cascade for a full redraw.
+            t.send("\x0c")
+            self.assertIn(b"CYCLE 0002", t.output)
+            for old_control in (b"[s] BFS/DFS", b"new tree", b"[e] step"):
+                self.assertNotIn(old_control, t.output)
+            t.resize(24, 64)
+            t.send("\x0c")
+            self.assertIn(b"RECONSTRUCTING INTENT", t.output)
+            t.send("6")
+            t.send("s")  # Fly stimulus retains its existing shortcut.
+            t.send("\x0c")
+            self.assertIn(b"Banana signal delivered", t.output)
+            self.assertEqual(t.finish(), t.original)
+            self.assertEqual(t.process.returncode, 0)
+            self.assertNotIn(b"Traceback", t.output)
+
     def test_flylab_keyboard_mouse_brofist_and_compact_layout(self):
         with tempfile.TemporaryDirectory() as directory:
             t = self.launch(directory, options=("--calm",))
@@ -225,7 +251,10 @@ class TerminalTests(unittest.TestCase):
             self.assertIn(b"FLY DOOM / MOCK", t.output)
             t.send("k")
             self.assertIn(b"emotional support human", t.output)
+            self.assertIn(b"Experiments shut down", t.output)
+            t.send("d")  # Kitty shut down Doom; restart it, then return the fly.
             t.send("d")
+            t.send("\x0c")  # Curses may retain the F from FLY DOOM between redraws.
             self.assertIn(b"Fly returned to its enclosure", t.output)
             t.resize(24, 64)
             t.send(":doom\n")
@@ -240,8 +269,78 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("Open Konsole", result.stderr)
 
+    def test_operations_commands_mouse_receipts_and_case_steps_in_calm_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            t = self.launch(directory, options=("--calm", "--ascii"))
+            state = Path(directory) / "lrp/state.json"
+            t.send("7")
+            self.assertIn(b"OVERFUNDED AGENCY", t.output)
+            t.send("\x1b[<0;24;10M")  # Aura audit experiment button.
+            self.assertEqual(json.loads(state.read_text())["audits"], 1)
+            t.send(":swarm\n")
+            self.assertEqual(json.loads(state.read_text())["agents"], 80)
+            for cmd in ("lockin", "breach", "breach", "overthink sounds good", "nonchalance"):
+                t.send(":" + cmd + "\n")
+            t.send("\x0c")
+            self.assertIn(b"checking whether anyone noticed", t.output)
+            t.send(":incident\n")
+            t.send(":incident next\n")
+            t.send("\x0c")
+            self.assertIn(b"message contains 'quick question'", t.output)
+            self.assertEqual(json.loads(state.read_text())["cases"], 1)
+            t.send("p")
+            t.send("k")
+            t.send("7")
+            t.send("\x0c")
+            self.assertIn(b"EMERGENCY SHUTDOWN AUTHORIZED BY KITTY", t.output)
+            t.resize(24, 64)
+            t.send(":audit\n")
+            t.send("\x1bOB")
+            t.send("\x0c")
+            self.assertIn(b"BROFIST CHARITY CREDIT", t.output)
+            t.send("\x1bOA")
+            self.assertEqual(t.finish(), t.original)
+            self.assertEqual(t.process.returncode, 0)
+            self.assertNotIn(b"Traceback", t.output)
+
+    def test_banana_promotions_survive_restart_without_losing_notes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            t = self.launch(directory, options=("--calm",))
+            t.send(":note preserve the main quest\n")
+            t.send("6")
+            for _ in range(9):
+                t.send("s")
+            t.send("\x0c")
+            self.assertIn(b"INTERIM CTO", t.output)
+            t.finish()
+            again = self.launch(directory, options=("--calm",))
+            again.send("6")
+            self.assertIn(b"INTERIM CTO", again.output)
+            data = json.loads((Path(directory) / "lrp/state.json").read_text())
+            self.assertEqual(data["bananas"], 9)
+            self.assertEqual(data["notes"][-1]["text"], "preserve the main quest")
+            self.assertEqual(again.finish(), again.original)
+
 
 class InstallerTests(unittest.TestCase):
+    def test_standalone_build_runs_the_operations_screen(self):
+        built = subprocess.run([sys.executable, "build.py"], cwd=ROOT, capture_output=True, text=True)
+        self.assertEqual(built.returncode, 0, built.stderr)
+        archive = ROOT / "dist/lrp"
+        version = subprocess.run([str(archive), "--version"], cwd="/tmp", capture_output=True, text=True)
+        self.assertEqual(version.stdout.strip(), "lrp " + __version__)
+        redirected = subprocess.run([str(archive)], cwd="/tmp", capture_output=True, text=True)
+        self.assertEqual(redirected.returncode, 1)
+        self.assertIn("Open Konsole", redirected.stderr)
+        with tempfile.TemporaryDirectory() as directory:
+            t = Terminal(directory, launcher=archive, options=("--calm",))
+            self.addCleanup(t.close)
+            t.send(":lockin\n")
+            t.send("\x0c")
+            self.assertIn(b"NEW PARTICLE", t.output)
+            self.assertEqual(t.finish(), t.original)
+            self.assertEqual(t.process.returncode, 0)
+
     def test_install_repeat_collision_and_uninstall(self):
         with tempfile.TemporaryDirectory() as directory:
             env = dict(os.environ, HOME=directory, PATH="/usr/bin:/bin")
@@ -301,17 +400,22 @@ class AnimationTests(unittest.TestCase):
         app.view, app.offset = 5, 0
         app.doom_enabled = True
         app.doom = FlyDoom()
+        app.search = GraphSearch(random.Random(1))
+        app.bureau = Bureau({"agents": 64, "cases": 0})
+        app.store = SimpleNamespace(data=app.bureau.data)
         with patch("lrp.app.time.monotonic", return_value=100.05):
             app.update()
         self.assertGreater(app.fx_time, 0)
         for flag, now in (("paused", 101), ("calm", 102), ("editing", 103)):
             before = app.fx_time
             game_before = app.doom.time
+            bureau_before = app.bureau.time
             setattr(app, flag, True)
             with patch("lrp.app.time.monotonic", return_value=now):
                 app.update()
             self.assertEqual(app.fx_time, before)
             self.assertEqual(app.doom.time, game_before)
+            self.assertEqual(app.bureau.time, bureau_before)
             setattr(app, flag, False)
         before = app.fx_time
         with patch("lrp.app.time.monotonic", return_value=103.05):
@@ -327,6 +431,48 @@ class AnimationTests(unittest.TestCase):
         self.assertGreater(app.fx_time - before, .1)
         self.assertEqual(app.doom.time, game_before)
 
+    def test_search_freezes_when_hidden_paused_calm_or_typing(self):
+        app = Console.__new__(Console)
+        app.last_frame = app.last_host = app.last_tick = app.last_feed = 100.0
+        app.fx_time = 0.0
+        app.paused = app.calm = app.editing = app.panic = False
+        app.view, app.offset = 0, 0
+        app.phase, app.threat, app.cope = 0, 86, 34
+        app.trace = deque(maxlen=120)
+        app.log = lambda *args: None
+        app.read_host = lambda: {}
+        app.search = GraphSearch(random.Random(1))
+        app.bureau = Bureau({"agents": 64, "cases": 0})
+        app.store = SimpleNamespace(data=app.bureau.data)
+        now = 100.0
+        for flag in ("paused", "calm", "editing", "hidden"):
+            if flag == "hidden":
+                app.view = 1
+            else:
+                setattr(app, flag, True)
+            before = (app.search.elapsed, app.search.time, app.search.generation)
+            for _ in range(10):
+                now += .1
+                with patch("lrp.app.time.monotonic", return_value=now):
+                    app.update()
+            self.assertEqual((app.search.elapsed, app.search.time, app.search.generation), before)
+            if flag == "hidden":
+                app.view = 0
+            else:
+                setattr(app, flag, False)
+        for _ in range(6):
+            now += .1
+            with patch("lrp.app.time.monotonic", return_value=now):
+                app.update()
+        self.assertGreaterEqual(len(app.search.visited), 10)
+        self.assertEqual(app.search.visited[0], app.search.start)
+        before = len(app.search.visited)
+        app.panic = True
+        now += .1
+        with patch("lrp.app.time.monotonic", return_value=now):
+            app.update()
+        self.assertGreaterEqual(len(app.search.visited) - before, 3)
+
     def test_rotating_geometry_stays_inside_small_and_large_panels(self):
         for columns, rows in ((8, 3), (34, 5), (54, 24)):
             frames = []
@@ -336,6 +482,105 @@ class AnimationTests(unittest.TestCase):
                 self.assertTrue(all(0 <= x < columns and 0 <= y < rows for x, y in points))
                 self.assertEqual(len(edges), 32)
             self.assertNotEqual(frames[0], frames[2])
+
+
+class SearchTests(unittest.TestCase):
+    def test_cyclic_graphs_have_real_bfs_and_dfs_orders(self):
+        shapes = set()
+        for seed in range(30):
+            search = GraphSearch(random.Random(seed))
+            shapes.add(tuple(search.edges))
+            self.assertTrue(22 <= len(search.nodes) <= 26)
+            self.assertGreater(len(search.edges), len(search.nodes))
+            self.assertTrue(all(a != b and a in search.neighbors[b] and b in search.neighbors[a]
+                                for a, b in search.edges))
+            bfs, queue, seen, distances = [], deque([search.start]), {search.start}, {search.start: 0}
+            while queue:
+                node = queue.popleft()
+                bfs.append(node)
+                for other in search.neighbors[node]:
+                    if other not in seen:
+                        seen.add(other)
+                        distances[other] = distances[node] + 1
+                        queue.append(other)
+            dfs = []
+
+            def visit(node):
+                dfs.append(node)
+                for other in search.neighbors[node]:
+                    if other not in dfs:
+                        visit(other)
+
+            visit(search.start)
+            for algorithm, expected in (("BFS", bfs), ("DFS", dfs)):
+                search.restart(algorithm)
+                for _ in search.nodes:
+                    search.step()
+                self.assertTrue(search.complete)
+                self.assertEqual(search.visited, expected)
+                self.assertEqual(set(search.visited), set(search.nodes))
+                self.assertEqual(len(search.visited), len(set(search.visited)))
+                for node, parent in search.parents.items():
+                    if parent is not None:
+                        self.assertIn(node, search.neighbors[parent])
+                        if algorithm == "BFS":
+                            self.assertEqual(distances[node], distances[parent] + 1)
+                before = search.visited[:]
+                search.step()
+                self.assertEqual(search.visited, before)
+            for columns, rows in ((54, 8), (58, 8), (74, 8), (100, 15)):
+                points = search.positions(columns, rows)
+                self.assertEqual(len(set(points.values())), len(search.nodes))
+                self.assertTrue(all(1 <= x < columns - 1 and 0 <= y < rows for x, y in points.values()))
+                for node, (x, y) in points.items():
+                    self.assertTrue(all(y != oy or abs(x - ox) >= 4
+                                        for other, (ox, oy) in points.items() if other != node))
+        self.assertEqual(len(shapes), 30)
+
+    def test_fast_autoplay_randomizes_and_preserves_frame_remainder(self):
+        search = GraphSearch(random.Random(7))
+        algorithms = {search.algorithm}
+        for generation in range(1, 31):
+            duration = len(search.nodes) * search.STEP_DELAY
+            search.advance(duration + .001)
+            self.assertTrue(search.complete)
+            self.assertEqual(search.generation, generation)
+            search.advance(search.RESET_DELAY)
+            self.assertEqual(search.generation, generation + 1)
+            self.assertAlmostEqual(search.elapsed, generation * .001)
+            algorithms.add(search.algorithm)
+        self.assertEqual(algorithms, {"BFS", "DFS"})
+        a, b = GraphSearch(random.Random(9)), GraphSearch(random.Random(9))
+        a.advance(3.17)
+        for _ in range(317):
+            b.advance(.01)
+        self.assertEqual((a.generation, a.visited), (b.generation, b.visited))
+        self.assertAlmostEqual(a.elapsed, b.elapsed)
+
+    def test_graph_render_stays_inside_panel_and_freezes(self):
+        panel = SearchPanels()
+        panel.search = GraphSearch(random.Random(4))
+        panel.box = lambda *args: None
+        for height, columns in ((14, 56), (14, 62), (14, 78), (30, 104)):
+            draws = []
+
+            def put(y, x, text, style, max_width=None):
+                self.assertTrue(1 <= y < height - 1)
+                self.assertGreaterEqual(x, 1)
+                self.assertLessEqual(x + min(len(text), max_width or len(text)), columns - 1)
+                draws.append((y, x, text, style))
+
+            panel.put = put
+            panel.search.advance(.3)
+            panel.search_panel(0, 0, height, columns)
+            before = draws[:]
+            draws.clear()
+            panel.search_panel(0, 0, height, columns)
+            self.assertEqual(draws, before)
+            panel.search.advance(.1)
+            draws.clear()
+            panel.search_panel(0, 0, height, columns)
+            self.assertNotEqual(draws, before)
 
 
 if __name__ == "__main__":

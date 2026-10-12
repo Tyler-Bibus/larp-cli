@@ -8,6 +8,7 @@ TRANSMISSIONS = [
     ("INTEL", "the group chat has requested a congressional hearing."),
     ("FAULT", "crashout containment failed. bro is writing paragraphs."),
     ("COPE", "trust the process. the process has no idea either."),
+    ("FAULT", "resume phone number wrong for 3 years. networking difficulty: impossible."),
     ("INTEL", "opponent initiated an aura battle. maintain eye contact."),
     ("WARN", "performative nonchalance detected at the perimeter."),
     ("FAULT", "locked in to the wrong task for six consecutive hours."),
@@ -31,14 +32,60 @@ TRANSMISSIONS = [
     ("INTEL", "the auxiliary found your playlist. aura audit pending."),
     ("FAULT", "screen time report has become a horror anthology."),
     ("COPE", "a minor inconvenience has been added to your villain arc."),
+    ("INTEL", "Reality Operations: catastrophically overfunded. problem severity: minor."),
+    ("WARN", "GOBLIN-09 ate the context window. requesting a smaller snack."),
+    ("INTEL", "the fifth dimension contains cables. none of them fit."),
+    ("COPE", "the fly landed on the monitor. the board calls this strategic direction."),
+    ("WARN", "Aura Revenue Service requests receipts for your effortless entrance."),
+    ("FAULT", "motivation collided with deadline. a dotfile side quest was created."),
+    ("INTEL", "kitty retains emergency shutdown authority. everyone else is advisory."),
 ]
+
+# Sequences stay together on the wire; each beat gets time to land.
+INCIDENTS = (
+    ("QUICK QUESTION", (
+        ("INTEL", "one unread message detected."),
+        ("WARN", "message contains 'quick question'."),
+        ("FAULT", "threat model expanded to include your entire afternoon."),
+        ("COPE", "drafting response with strategic lowercase."),
+        ("INTEL", "sender resolved it themselves."),
+        ("FAULT", "emotional mobilization costs remain unrecoverable."),
+    )),
+    ("SWARM STANDUP", (
+        ("INTEL", "ORACLE-01 scheduled a five-minute standup."),
+        ("WARN", "GOBLIN-09 requests a meeting to define standing."),
+        ("FAULT", "INTERN-INFINITY created a framework for being upright."),
+        ("COPE", "the fly is now the escalation contact."),
+        ("INTEL", "escalation response: banana."),
+        ("FAULT", "meeting adjourned. next meeting: why nothing got done."),
+    )),
+    ("USB FIRST CONTACT", (
+        ("INTEL", "unidentified USB connector recovered from dimension five."),
+        ("WARN", "connector inserted correctly on first attempt."),
+        ("FAULT", "known laws of physics have requested legal representation."),
+        ("COPE", "ORACLE-01 recommends turning the universe off and on."),
+        ("INTEL", "kitty sat on the evidence."),
+        ("COPE", "case closed. the cat's jurisdiction is absolute."),
+    )),
+)
+
+OVERTHINK_SUBJECTS = ("sounds good", "ok.", "we should catch up", "no worries", "seen 14:32")
+OVERTHINK_RESULTS = (
+    "BREAKTHROUGH: they may have meant exactly that.",
+    "NEW HYPOTHESIS: punctuation has a hidden agenda.",
+    "PEER REVIEW: GOBLIN-09 says check it again.",
+    "FINDING: 26 interpretations. zero clarification.",
+    "CONFIDENCE: high. understanding: unchanged.",
+)
 
 FONT = {
     "A": ["01110", "11011", "11111", "11011", "11011"],
+    "B": ["11110", "11011", "11110", "11011", "11110"],
     "C": ["01111", "11000", "11000", "11000", "01111"],
     "D": ["11110", "11011", "11011", "11011", "11110"],
     "E": ["11111", "11000", "11110", "11000", "11111"],
     "I": ["11111", "00100", "00100", "00100", "11111"],
+    "H": ["11011", "11011", "11111", "11011", "11011"],
     "K": ["11011", "11010", "11100", "11010", "11011"],
     "L": ["11000", "11000", "11000", "11000", "11111"],
     "N": ["11001", "11101", "11111", "10111", "10011"],
@@ -51,7 +98,7 @@ FONT = {
 }
 
 HELP = [
-    ("1 / 2 / 3 / 4 / 5 / 6", "Control, wire, dossier, vault, manual, fly lab"),
+    ("1 / 2 / 3 / 4 / 5 / 6 / 7", "Control, wire, dossier, vault, manual, fly lab, operations"),
     ("Tab / Shift-Tab", "Next / previous screen"),
     ("f / click BROFIST", "Fist bump animation, +67 aura, fly reaction; f/Esc dismiss"),
     ("6 / :fly", "Mock fly brain and animated ASCII fly"),
@@ -74,6 +121,13 @@ HELP = [
     ("", "panic / contain / aura / grass / pause / calm"),
     ("", "note <text> / alias <name> / shell / quit"),
     ("", "fly / brofist / stimulate / doom / kitty"),
+    ("7 / :ops", "Overfunded agency: clickable fictional experiments and receipts"),
+    ("overthink <message>", "Analyze a harmless message with excessive graph machinery"),
+    ("lockin / audit / swarm", "Collide motivation, audit aura, or deploy more little guys"),
+    ("breach / nonchalance", "Open dimensional storage or visibly try to look unbothered"),
+    ("incident [next]", "Read an unfolding case; next advances a beat in calm/frozen mode"),
+    ("fly promotions", "Bananas fund promotions at 2, 5, and 9 feeds; rank saves locally"),
+    ("kitty authority", "Pet kitty to shut down fictional experiments and contain panic"),
     ("INPUT", "Esc cancels; arrows edit; Up/Down recall; Ctrl-U clears"),
     ("LOCAL DATA", "Notes, callsign and scores save automatically."),
     ("SIMULATION", "All alerts, feed messages and aura readings are fiction."),

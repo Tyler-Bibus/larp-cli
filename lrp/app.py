@@ -19,9 +19,11 @@ import unicodedata
 
 from . import __version__
 from .arcade import ArcadePanels, FlyDoom
+from .bureau import Bureau, BureauPanels, fly_rank
 from .content import FONT, HELP, TRANSMISSIONS
 from .creatures import CreaturePanels
 from .motion import marquee, segment, tesseract
+from .search import SearchPanels, GraphSearch
 from .state import Store, clean, state_path
 
 
@@ -66,11 +68,14 @@ def wrap(text, limit):
 
 
 COMMANDS = ("help", "home", "feed", "dossier", "vault", "status", "panic", "contain",
-            "aura", "grass", "pause", "calm", "note", "alias", "shell", "quit", "fly", "brofist", "stimulate", "doom", "kitty")
-VIEWS = ("CONTROL", "WIRE", "DOSSIER", "VAULT", "MANUAL", "FLYLAB")
+            "aura", "grass", "pause", "calm", "note", "alias", "shell", "quit", "fly", "brofist", "stimulate", "doom", "kitty",
+            "ops", "overthink", "lockin", "audit", "swarm", "breach", "nonchalance", "incident")
+VIEWS = ("CONTROL", "WIRE", "DOSSIER", "VAULT", "MANUAL", "FLYLAB", "OPS")
 
 
-class Console(CreaturePanels, ArcadePanels):
+class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
+    wrap_text = staticmethod(wrap)
+
     def __init__(self, screen, args, store):
         self.screen, self.args, self.store = screen, args, store
         self.running = True
@@ -89,6 +94,8 @@ class Console(CreaturePanels, ArcadePanels):
         self.kitty_petted_until = 0.0
         self.doom_enabled = False
         self.doom = FlyDoom()
+        self.search = GraphSearch()
+        self.bureau = Bureau(store.data)
         self.brofist_started = None
         self.buttons = []
         self.last_host = 0
@@ -113,6 +120,7 @@ class Console(CreaturePanels, ArcadePanels):
         for tag, text in TRANSMISSIONS[:9]:
             self.log(tag, text)
         self.log("LOCAL", "Operator online. All threat traffic is simulated.")
+        self.log("FLY", f"Fly reporting for duty: {fly_rank(store.data['bananas'])}. Compensation: banana.")
         if store.error:
             self.message = store.error
 
@@ -234,6 +242,8 @@ class Console(CreaturePanels, ArcadePanels):
         self.put(18, max(2, span - 8 - pos), "[<<<]", "mint")
 
     def log(self, tag, text):
+        if self.view == 1 and self.offset:
+            self.offset = min(self.logs.maxlen - 1, self.offset + 1)
         self.logs.append((datetime.now().strftime("%H:%M:%S"), tag, clean(text)))
 
     def save(self):
@@ -250,7 +260,16 @@ class Console(CreaturePanels, ArcadePanels):
         if self.paused or self.calm or self.editing:
             self.last_tick = self.last_feed = now
             return
-        self.fx_time += elapsed * (2.4 if self.panic else 1.0)
+        self.fx_time += elapsed * (.2 if self.bureau.nonchalant else 2.4 if self.panic else 1.0)
+        cases_before = self.store.data["cases"]
+        for tag, text in self.bureau.advance(elapsed):
+            self.log(tag, text)
+            if text.startswith("CRITICAL: nobody noticed"):
+                self.message = text
+        if self.store.data["cases"] != cases_before:
+            self.save()
+        if self.view == 0:
+            self.search.advance(elapsed * (.2 if self.bureau.nonchalant else 1.8 if self.panic else 1.0))
         if getattr(self, "doom_enabled", False) and self.view == 5:
             self.doom.advance(elapsed)
         if now - self.last_tick >= .12:
@@ -261,9 +280,9 @@ class Console(CreaturePanels, ArcadePanels):
             self.trace.append(random.randrange(20, 100) if self.panic else random.randrange(10, 85))
         if now - self.last_feed >= (.18 if self.panic else .65):
             self.last_feed = now
-            if self.view == 1 and self.offset:
-                self.offset = min(len(self.logs), self.offset + 1)
-            self.log(*random.choice(TRANSMISSIONS))
+            # Leave the wire quiet between case beats so the story remains readable.
+            if not self.bureau.case_active and self.bureau.time >= self.bureau.next_beat + 3.2:
+                self.log(*random.choice(TRANSMISSIONS))
 
     @staticmethod
     def read_host():
@@ -291,16 +310,21 @@ class Console(CreaturePanels, ArcadePanels):
         self.put(y + 1, x, "[" + ("#" if self.ascii else "━") * count + "·" * (blocks - count) + "]", style, size)
 
     def control(self):
+        if self.h < 40 or self.w < 90:
+            self.search_panel(5, 1, self.h - 10, self.w - 2)
+            footer = "UNBOTHERED / checking whether anyone noticed..." if self.bureau.nonchalant else f"THREAT {self.threat}% / COPE {self.cope}% / [p] crashout [a] aura [g] grass"
+            self.put(self.h - 5, 2, footer, "amber", self.w - 4)
+            return
         wide = self.w >= 108 and self.h >= 26
         span = self.w - 33 if wide else self.w
         self.interference(span)
-        status = "CRITICAL" if self.panic else "COOKED" if self.threat >= 65 else "LOCKED IN"
+        status = "UNBOTHERED" if self.bureau.nonchalant else "CRITICAL" if self.panic else "COOKED" if self.threat >= 65 else "LOCKED IN"
         self.center(5, "REPORT ON TERMINAL AURA DISCHARGE", "mint", 0, span)
-        self.center(6, "SUBJECT: YOU   /   CLASSIFICATION: EXTREMELY ONLINE", "dim", 0, span)
+        self.center(6, "98% COMPUTE ALLOCATED TO APPEARING EFFORTLESS" if self.bureau.nonchalant else "SUBJECT: YOU   /   CLASSIFICATION: EXTREMELY ONLINE", "dim", 0, span)
         self.box(8, 1, 7, span - 2, "REALITY STATUS / SIMULATED", "red")
         self.big(9, status, span - 2, 1)
-        self.center(15, "POSSIBLE SIMILARITY WITH A SKILL ISSUE", "mint", 0, span)
-        label = "CONTAINMENT FAILED" if self.panic else "RECALCULATING" if self.threat >= 65 else "WE ARE SO BACK"
+        self.center(15, "checking whether anyone noticed..." if self.bureau.nonchalant else "POSSIBLE SIMILARITY WITH A SKILL ISSUE", "mint", 0, span)
+        label = "VISIBLY RELAXED" if self.bureau.nonchalant else "CONTAINMENT FAILED" if self.panic else "RECALCULATING" if self.threat >= 65 else "WE ARE SO BACK"
         self.fill(17, 2, span - 4, "alert")
         self.put(17, 2, marquee("/// " + label + " /// " + label, span - 4, self.fx_time * 16), "alert", span - 4)
         spinner = "|/-\\"[int(self.fx_time * 8) % 4]
@@ -323,17 +347,18 @@ class Console(CreaturePanels, ArcadePanels):
             self.kitty(16, x + 2, panel - 4)
             self.button(19, x + 2, " [k] pet kitty ", "kitty", "dim")
         if self.h >= 28:
-            self.put(21, 2, marquee(" +++ THE ALGORITHM IS WATCHING YOU LARP +++ LOCK IN +++ DO NOT PERCEIVE THE REACTOR +++", self.w - 4, -self.fx_time * 11), "red", self.w - 4)
+            if self.bureau.case_lines and self.bureau.time < self.bureau.next_beat + 3.2:
+                ticker = f"CASE {self.bureau.case_id:04d} / {self.bureau.case_title}: " + self.bureau.case_lines[-1]
+                offset = max(0, self.bureau.time - self.bureau.next_beat + 3.2) * 18
+            else:
+                ticker = " +++ MINOR PROBLEMS / MAJOR FUNDING +++ [7] OPERATIONS +++ CTO RESPONSE: BANANA +++"
+                offset = -self.fx_time * 11
+            self.put(21, 2, marquee(ticker, self.w - 4, offset), "red", self.w - 4)
         bottom = self.h - 5
         if bottom < 24:
             return
         left = self.w * 2 // 3
-        self.box(22, 1, bottom - 21, left - 2, "INTERCEPT / FICTIONAL WIRE")
-        rows = max(0, bottom - 24)
-        for row, (stamp, tag, message) in enumerate(list(self.logs)[-rows:] if rows else []):
-            self.put(24 + row, 3, stamp, "dim", 8)
-            self.put(24 + row, 12, f"{tag:5}", "red" if tag in ("WARN", "FAULT") else "amber", 5)
-            self.put(24 + row, 18, message, "white", left - 21)
+        self.search_panel(22, 1, bottom - 21, left - 2)
         x = left + 1
         self.box(22, x, bottom - 21, self.w - x - 1, "VIBE TELEMETRY / SIM")
         size = self.w - x - 5
@@ -350,7 +375,7 @@ class Console(CreaturePanels, ArcadePanels):
                 self.put(bottom - 1, x + 2, "FLY BRAIN / MOCKUP / [6]", "mint", size)
             else:
                 self.reactor(29, x + 2, size, bottom - 30)
-                self.put(bottom - 1, x + 2, "4D COPE REACTOR / " + spinner, "mint", size)
+                self.put(bottom - 1, x + 2, "LOCKED-IN COLLIDER / :lockin", "mint", size)
             chars = "._-=+#" if self.ascii else "▁▂▃▄▅▆▇█"
             samples = list(self.trace)[-size:]
             self.put(26, x + 2, "".join(chars[min(len(chars) - 1, n * len(chars) // 100)] for n in samples), "red", size)
@@ -387,6 +412,13 @@ class Console(CreaturePanels, ArcadePanels):
                 (f"ARCHIVED NOTES    {len(data['notes'])}", "white"),
                 (f"CURRENT THREAT    {self.threat}% / FICTIONAL", "red"),
                 (f"COPE RESERVE      {self.cope}% / FICTIONAL", "mint"), ("", "dim"),
+                ("REALITY OPERATIONS / OFFICE LORE", "mint"),
+                ("MANDATE           MINOR PROBLEMS, MAJOR FUNDING", "white"),
+                (f"FLY EXECUTIVE     {fly_rank(data['bananas'])}", "amber"),
+                (f"BANANA BUDGET     {data['bananas']} / COMPENSATION: BANANA", "white"),
+                (f"LITTLE GUYS       {data['agents']:,} / WORK: PENDING", "white"),
+                (f"AURA AUDITS       {data['audits']} / CASES OPENED: {data['cases']}", "white"),
+                ("SHUTDOWN AUTHORITY KITTY / ABSOLUTE JURISDICTION", "amber"), ("", "dim"),
                 ("PSYCHOLOGICAL ASSESSMENT", "mint"),
                 ("Insists the side quest is essential to the main quest.", "white"),
                 ("Observed aura farming in an empty terminal.", "white"),
@@ -437,15 +469,15 @@ class Console(CreaturePanels, ArcadePanels):
         mode = "CALM" if self.calm else "FROZEN" if self.paused else "LIVE SIM"
         self.put(2, self.w - len(mode) - 2, mode, "amber")
         x = 1
-        names = VIEWS if self.w >= 80 else ("CTL", "WIRE", "ID", "VAULT", "HELP", "FLY")
+        names = VIEWS if self.w >= 80 else ("CTL", "WIRE", "ID", "VAULT", "HELP", "FLY", "OPS")
         for i, name in enumerate(names):
             label = f" {i+1} {name} "
-            self.button(3, x, label, ("home", "feed", "dossier", "vault", "help", "fly")[i], "bar" if i == self.view else "dim")
+            self.button(3, x, label, ("home", "feed", "dossier", "vault", "help", "fly", "ops")[i], "bar" if i == self.view else "dim")
             x += len(label) + 1
         if self.w >= 94:
             self.button(3, self.w - 16, " [f] BROFIST ", "brofist", "alert")
         self.put(4, 1, marquee("/////      /////      /////      /////", self.w - 2, -self.fx_time * 18), "blood" if self.panic else "ghost")
-        (self.control, self.wire, self.dossier, self.vault, self.manual, self.flylab)[self.view]()
+        (self.control, self.wire, self.dossier, self.vault, self.manual, self.flylab, self.operations)[self.view]()
         self.brofist_overlay()
         self.line(self.h - 4, 1, self.w - 2)
         self.put(self.h - 3, 1, self.store.error or self.message, "red" if self.store.error else "amber", self.w - 2)
@@ -465,7 +497,7 @@ class Console(CreaturePanels, ArcadePanels):
                 pass
         else:
             self.button(self.h - 2, 1, " [f] BROFIST ", "brofist", "alert")
-            self.put(self.h - 2, 15, "[:] cmd [b] Bash [6] fly [Space] freeze [q] exit", "mint")
+            self.put(self.h - 2, 15, "[:]cmd [b]Bash [6]fly [7]ops [Space]freeze [q]exit", "mint")
             self.put(self.h - 1, 1, "CONNECTED TO ABSOLUTELY NOTHING.   ALL PANIC IS LOCALLY SOURCED.", "dim", self.w - 24)
             self.kitty_button()
             try:
@@ -492,22 +524,34 @@ class Console(CreaturePanels, ArcadePanels):
         cmd, _, arg = raw.strip().partition(" ")
         cmd = cmd.lower()
         arg = clean(arg.strip())
-        views = {"home": 0, "feed": 1, "dossier": 2, "vault": 3, "help": 4, "fly": 5}
+        views = {"home": 0, "feed": 1, "dossier": 2, "vault": 3, "help": 4, "fly": 5, "ops": 6}
         if cmd in views:
             self.change_view(views[cmd])
             self.message = VIEWS[self.view] + " selected."
         elif cmd in ("quit", "exit", "q"):
             self.running = False
+        elif cmd in ("overthink", "lockin", "audit", "swarm", "breach", "nonchalance", "incident"):
+            events = self.bureau.action(cmd, arg)
+            for tag, text in events:
+                self.log(tag, text)
+            self.message = events[-1][1] if events else "Experiment recorded."
+            self.change_view(0 if cmd in ("overthink", "nonchalance") else 6)
+            self.save()
         elif cmd == "doom":
             self.doom_enabled = not self.doom_enabled
             if self.doom_enabled:
                 self.doom = FlyDoom()
             self.change_view(5)
-            self.message = "FLY DOOM: autoplay engaged. [d] returns to the fly." if self.doom_enabled else "Fly returned to its enclosure. Still thinking about Doom."
+            self.message = "FLY DOOM: autoplay engaged. Mandatory executive training. [d] returns to the fly." if self.doom_enabled else "Fly returned to its enclosure. Still thinking about Doom."
             self.log("FLY", self.message)
         elif cmd == "kitty":
             self.kitty_petted_until = self.fx_time + 6
-            self.message = "Kitty: purrrrr <3  You have been selected as the emotional support human."
+            self.bureau.shutdown()
+            self.panic, self.threat, self.cope = False, 12, 100
+            self.paused = True
+            self.brofist_started = None
+            self.doom_enabled = False
+            self.message = "Kitty: purrrrr <3  emotional support human selected. Experiments shut down. Space resumes."
             self.log("KITTY", "mrrp. <3")
         elif cmd == "brofist":
             if self.brofist_started is not None:
@@ -516,13 +560,21 @@ class Console(CreaturePanels, ArcadePanels):
             self.brofist_started = self.fx_time - (1.2 if self.calm or self.paused else 0)
             self.fly_stimulus_until = self.fx_time + 7
             self.store.data["aura"] = min(999999, self.store.data["aura"] + 67)
+            self.store.data["brofists"] = min(999999, self.store.data["brofists"] + 1)
             self.message = "BROFIST CONFIRMED. +67 aura. The fly has accepted your friendship."
             self.log("BRO", self.message)
             self.save()
         elif cmd == "stimulate":
             self.fly_stimulus_until = self.fx_time + 6
+            previous = fly_rank(self.store.data["bananas"])
+            self.store.data["bananas"] = min(999999, self.store.data["bananas"] + 1)
             self.message = "Banana signal delivered. Little guy is absolutely locked in."
             self.log("FLY", self.message)
+            rank = fly_rank(self.store.data["bananas"])
+            if rank != previous:
+                self.message = f"FLY PROMOTED: {rank}. Board interpretation: bold strategic direction."
+                self.log("FLY", self.message)
+            self.save()
             self.change_view(5)
         elif cmd in ("panic", "contain"):
             self.panic = cmd == "panic"
@@ -536,6 +588,10 @@ class Console(CreaturePanels, ArcadePanels):
             self.store.data["aura"] = max(-999999, min(999999, self.store.data["aura"] + delta))
             self.message = f"AURA {delta:+d}. " + ("The pose was witnessed." if delta > 0 else "They saw you trying. It's over.")
             self.log("AURA", self.message)
+            if random.randrange(4) == 0:
+                for tag, text in self.bureau.action("audit"):
+                    self.log(tag, text)
+                self.message += " Aura audit triggered. Receipt on [7] OPS."
             self.save()
         elif cmd == "grass":
             self.threat, self.cope, self.panic = 12, 100, False
@@ -665,7 +721,7 @@ class Console(CreaturePanels, ArcadePanels):
             self.brofist_started = None
         elif key in ("q", "Q"):
             self.running = False
-        elif isinstance(key, str) and key in "123456":
+        elif isinstance(key, str) and key in "1234567":
             self.change_view(int(key) - 1)
         elif key in ("\t", curses.KEY_BTAB):
             self.change_view((self.view + (-1 if key == curses.KEY_BTAB else 1)) % len(VIEWS))

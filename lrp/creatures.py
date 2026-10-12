@@ -5,6 +5,7 @@ import math
 import random
 
 from .motion import segment
+from .bureau import fly_rank
 
 
 @lru_cache(maxsize=1)
@@ -93,7 +94,8 @@ class CreaturePanels:
             self.put(y + dy + row, x + dx, line, "amber" if excited else "mint", columns - dx)
 
     def flylab(self):
-        self.page_title("FRUIT FLY / UNQUALIFIED NEURAL OPERATOR", "MOCK CONNECTOME / DECORATIVE FIRING PATTERNS / NO BIOLOGICAL MODEL")
+        rank = fly_rank(self.store.data["bananas"])
+        self.page_title("FRUIT FLY / " + rank, "MOCK CONNECTOME / DECORATIVE FIRING / NO BIOLOGICAL MODEL / BANANA-FUNDED OFFICE")
         split = self.w * 3 // 5
         end = self.h - 8
         panel_h = end - 9
@@ -119,7 +121,7 @@ class CreaturePanels:
         self.button(self.h - 6, 3, " [f] BROFIST ", "brofist", "alert")
         self.button(self.h - 6, 19, " [s] FEED BANANA ", "stimulate")
         self.button(self.h - 6, 38, " [d] RETURN FLY " if self.doom_enabled else " [d] PLAY DOOM ", "doom", "alert")
-        self.put(self.h - 5, 3, "120 imaginary nodes / zero actual fly neurons / 100% little guy", "dim", self.w - 6)
+        self.put(self.h - 5, 3, f"BANANA BUDGET {self.store.data['bananas']} / {rank} / CTO RESPONSE: landed on monitor", "dim", self.w - 6)
 
     def brofist_overlay(self):
         if self.brofist_started is None or self.editing:
