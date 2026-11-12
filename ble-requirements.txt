@@ -1,0 +1,2 @@
+# Optional runtime for BLE advertising discovery and telemetry; RF mode uses tshark.
+bleak==3.0.2
