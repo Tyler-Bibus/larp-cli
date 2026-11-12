@@ -84,4 +84,8 @@ after 12 active seconds. Case transmissions advance in order at 3.2-second
 intervals without random feed interruptions. Input, calm mode, and Space freeze
 all experiment/case clocks; explicit commands still work and `incident next`
 provides a static way to read every beat. The fly's banana-funded promotions save
-locally. Petting kitty invokes its absolute fictional shutdown authority.
+locally. Petting kitty invokes its absolute fictional shutdown authority while
+leaving the animation clock running unless the operator explicitly paused it.
+The status is a clickable PAUSE/RESUME control; resume clears both freeze and calm
+mode. Command editing displays INPUT with an Esc hint so its temporary pause is
+visible.

@@ -52,7 +52,7 @@ after 5 an incident commander, and after 9 the interim CTO. Promotions and offic
 counters survive restarts. Fly Doom is mandatory executive training. Kitty holds
 absolute shutdown authority: petting it contains panic, seals storage, stops
 nonchalance, closes active cases, dismisses brofists, and stops Fly Doom.
-It freezes the simulation; press Space to resume when the cat permits it.
+Petting it keeps the display animated and preserves any explicit pause or calm mode.
 Operations receipts wrap and scroll with arrows/Page Up/Page Down; small terminals
 prioritize readable receipts over the animated experiment stage.
 
@@ -90,7 +90,9 @@ replace Bash or start automatically when you open a terminal.
 
 | Key | Action |
 | --- | --- |
-| `1`–`7`, `Tab` | Control room, wire, dossier, vault, manual, fly lab, operations |
+| `1`–`8`, `Tab` | Control room, wire, dossier, vault, manual, fly lab, operations, BLE |
+| `a` in BLE | Start continuous, unfiltered advertising discovery |
+| `d` in BLE | Stop Bluetooth work; keep captured results visible |
 | `f`, click **BROFIST** | Fist bump, impact animation, +67 aura, fly reaction |
 | `s` in fly lab | Feed banana; animate a mock neural response |
 | `d` in fly lab, click **PLAY DOOM** | Toggle fly Doom autoplay / ASCII fly |
@@ -98,7 +100,7 @@ replace Bash or start automatically when you open a terminal.
 | `p` | Trigger or contain a crashout |
 | `a` | Farm aura; sometimes being seen trying loses points |
 | `g` | Touch grass; stabilize the simulation |
-| `Space` | Freeze or resume the simulation |
+| `Space`, click **PAUSE / RESUME** | Freeze or resume the simulation; resuming also turns calm mode off |
 | `m` | Toggle persistent calm mode |
 | `b` | Enter a **real interactive Bash session**; `exit` returns to LRP |
 | `n` | Write and save a local note |
@@ -122,7 +124,7 @@ help
 quit
 ```
 
-Other directives: `home`, `feed`, `dossier`, `vault`, `status`, and `pause`.
+Other directives: `home`, `feed`, `dossier`, `vault`, `status`, `pause`, and `resume`.
 Also: `fly`, `brofist`, `stimulate`, `doom`, and `kitty`. Tabs and labeled buttons accept mouse clicks
 in Konsole; hold Shift to select terminal text normally.
 Only `shell` / `b` launches Bash; fictional directives are not shell commands.
@@ -131,6 +133,96 @@ Office directives: `ops`, `overthink [message]`, `lockin`, `audit`, `swarm`,
 Bash inherits the launch directory and sets `LRP_SESSION=1`. Changes inside that
 child shell, including `cd` and exported variables, last for that Bash session.
 
+## BLE advertising / FPGA bring-up
+
+```sh
+lrp --ble-sniff
+```
+
+Or press `8`, then `a`, or enter `:ble sniff`. Discovery includes **all advertisers**,
+including unnamed devices and devices with unknown addresses or service UUIDs.
+The display shows current and peak received signal strength (**RSSI in dBm**),
+report counts, time since last reception, and decoded manufacturer/service data.
+Arrows scroll the recent advertisers. Press `d` to stop; `q` exits and stops discovery.
+Space/calm mode only pause the fictional effects; radio reception continues.
+Stop the current BLE task before starting another one.
+
+The optional adapter backend uses Bleak:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r ble-requirements.txt
+```
+
+The checkout automatically uses `.venv/bin/python` for Bluetooth work. Set
+`LRP_BLE_PYTHON` to use another Python with Bleak. Your Bluetooth adapter must be
+enabled and accessible through the OS Bluetooth service.
+
+The primary advertising channels are **37 / 2402 MHz**, **38 / 2426 MHz**, and
+**39 / 2480 MHz** ([Bluetooth SIG channel reference](https://www.bluetooth.com/wp-content/uploads/2020/10/EN-Understanding_Reliability.pdf)).
+A normal Bluetooth adapter reports decoded discovery data without the receiving
+channel or raw CRC. In adapter mode, the channel rows therefore say **unavailable**;
+counts are OS reports, which may combine ADV and scan-response data or suppress
+duplicates. Discovery uses active scanning and can send scan requests; it does not
+pair or connect. Payload fields are OS-decoded data, not raw on-air PDUs.
+`UI dropped` counts events discarded if the terminal cannot keep up (for example,
+while inside its Bash session); displayed totals then undercount received input.
+
+For actual channel measurements, use a configured BLE RF sniffer with TShark
+(for example, an nRF Sniffer with its Wireshark extcap installed):
+
+```sh
+tshark -D                       # Find your RF sniffer's interface identifier
+lrp --ble-interface '<interface identifier>'
+lrp --ble-capture capture.pcapng # Inspect an existing RF capture
+```
+
+Inside the app: `:ble sniff <interface identifier>` or `:ble replay <capture path>`.
+TShark must be on `PATH` and have capture permissions. Select a BLE RF sniffer
+interface; a laptop HCI interface still cannot supply per-packet RF channels.
+Configure the sniffer's advertising channel sweep in its own capture settings.
+LRP reads [nRF metadata](https://www.wireshark.org/docs/dfref/n/nordic_ble.html) and
+[BLE RF metadata](https://www.wireshark.org/docs/dfref/b/btle_rf.html), displays
+per-channel reception counts/RSSI and reported CRC failures, and excludes scan
+requests, scan responses, and connection requests from advertising packet counts.
+Missing measurements remain unknown. Captures on secondary channels are included
+in the unknown/secondary total. Replay ages describe time since LRP read a record.
+
+For an unknown FPGA, compare the advertiser list with its transmitter off and on,
+and watch for a nearby signal whose RSSI changes when you move it. A received
+advertisement demonstrates reception, but does not certify the whole transmitter.
+No reports **does not prove RF silence**: incorrect whitening, access address,
+modulation, timing, or CRC can make an FPGA transmission invisible to discovery.
+RF sniffers may also discard bad packets; arbitrary RF power requires an SDR or
+spectrum analyzer. One receiver can miss transmissions while listening elsewhere.
+
+The existing project telemetry remains under `:ble scan`, `:ble connect [name or
+address]`, and `:ble music` on the BLE page.
+
+### Bumble: play notes directly from advertisements
+
+Run `lrp --ble-adv-midi`, press `8` then **[v] BUMBLE MIDI**, or enter
+`:ble adv-midi`. This listens **only to F0:F1:F2:F3:F4:F5**, without connecting,
+and plays BM v1 or v2 manufacturer payloads through PipeWire's `pw-play`.
+The button stops any current BLE task before switching. `d` stops radio and audio.
+Override the address with `lrp --ble-adv-midi AA:BB:CC:DD:EE:FF` or
+`:ble adv-midi AA:BB:CC:DD:EE:FF`.
+
+v2 supports **eight independent voices with General MIDI programs and drums**.
+The screen shows each voice's note, velocity and program. Complete state snapshots
+recover changes after lost packets; strike toggles distinguish held notes from
+repeated hits. Duplicate packets keep held notes alive without retriggering them.
+After a one-second signal gap, the watchdog releases all voices. Only the address
+is matched, so v2 advertisements need no local name.
+
+v1's 11-byte monophonic events remain supported with their original duration and
+duplicate rules. v2 requires libfluidsynth and a GM SoundFont; TimGM6mb is configured
+locally in this checkout's ignored `.venv/share/soundfonts` directory. On another
+installation, install a GM SoundFont or set `LRP_SOUNDFONT=/path/to/gm.sf2`.
+v1 keeps its built-in synth. Arbitrary MIDI bytes require the agreed BM wrapper.
+Give the song-encoding agent the complete
+[sender handoff, byte layout, timing rules, and reference encoder](docs/bumble-adv-midi.md).
+
 ## Options
 
 ```sh
@@ -138,17 +230,24 @@ lrp --calm       # No automatic fictional feed / waveform updates
 lrp --ascii      # ASCII headline lettering and borders
 lrp --no-boot    # Skip the brief boot banner
 lrp --doctor    # Terminal and installation diagnostics
+lrp --ble-sniff # Live advertising discovery, including unnamed devices
+lrp --ble-adv-midi # Play Bumble's advertised note stream without connecting
 lrp --version
 ```
 
 No full-screen flashing or terminal bell. Calm mode leaves the real clock and host
 readings active; Space freezes the simulation and all effects for the current
-session. Animation also freezes while you type a command or note.
+session. Animation also freezes while you type a command or note; the status shows
+**INPUT / Esc cancel** until you execute or cancel it. The clickable status shows
+**FROZEN / RESUME** or **CALM / RESUME** when updates are stopped. Space or `:resume`
+clears both pause and calm mode so animation actually resumes.
 
 ## Install or remove
 
-Requires `python` on Arch (including `curses`) and Bash. No pip packages, root access,
-background service, network connection, or remote repository needed.
+Requires `python` on Arch (including `curses`) and Bash. The base console needs no
+pip packages, root access, background service, network connection, or remote
+repository. Optional BLE discovery needs Bleak and the OS Bluetooth service;
+RF capture needs TShark and a supported sniffer.
 
 ```sh
 python3 install.py

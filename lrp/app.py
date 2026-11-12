@@ -19,6 +19,8 @@ import unicodedata
 
 from . import __version__
 from .arcade import ArcadePanels, FlyDoom
+from .ble import BLELink, BLEPanels
+from .ble_adv_midi import BUMBLE_ADDRESS
 from .bureau import Bureau, BureauPanels, fly_rank
 from .content import FONT, HELP, TRANSMISSIONS
 from .creatures import CreaturePanels
@@ -68,12 +70,12 @@ def wrap(text, limit):
 
 
 COMMANDS = ("help", "home", "feed", "dossier", "vault", "status", "panic", "contain",
-            "aura", "grass", "pause", "calm", "note", "alias", "shell", "quit", "fly", "brofist", "stimulate", "doom", "kitty",
-            "ops", "overthink", "lockin", "audit", "swarm", "breach", "nonchalance", "incident")
-VIEWS = ("CONTROL", "WIRE", "DOSSIER", "VAULT", "MANUAL", "FLYLAB", "OPS")
+            "aura", "grass", "pause", "resume", "calm", "note", "alias", "shell", "quit", "fly", "brofist", "stimulate", "doom", "kitty",
+            "ops", "overthink", "lockin", "audit", "swarm", "breach", "nonchalance", "incident", "ble")
+VIEWS = ("CONTROL", "WIRE", "DOSSIER", "VAULT", "MANUAL", "FLYLAB", "OPS", "BLE")
 
 
-class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
+class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels, BLEPanels):
     wrap_text = staticmethod(wrap)
 
     def __init__(self, screen, args, store):
@@ -96,6 +98,7 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
         self.doom = FlyDoom()
         self.search = GraphSearch()
         self.bureau = Bureau(store.data)
+        self.ble = BLELink()
         self.brofist_started = None
         self.buttons = []
         self.last_host = 0
@@ -251,6 +254,8 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
             self.message = self.store.error
 
     def update(self):
+        if hasattr(self, "ble"):
+            self.ble.poll()
         now = time.monotonic()
         elapsed = min(.15, now - self.last_frame)
         self.last_frame = now
@@ -465,22 +470,30 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
         self.fill(0, 0, self.w, "bar", " LRP / REALITY OPERATIONS DIVISION")
         self.put(0, self.w - 22, datetime.now().strftime("%Y-%m-%d  %H:%M:%S"), "bar")
         self.put(1, 1, marquee("EMERGENCY BROADCAST SYSTEM // REALITY IS A SKILL ISSUE // AURA CONTAINMENT BREACH", self.w - 2, self.fx_time * 12), "red")
-        self.put(2, 1, "LOCAL CONSOLE / FICTIONAL THREAT TRAFFIC", "dim")
-        mode = "CALM" if self.calm else "FROZEN" if self.paused else "LIVE SIM"
-        self.put(2, self.w - len(mode) - 2, mode, "amber")
+        mode = (" INPUT / Esc cancel " if self.editing else
+                " CALM / RESUME " if self.calm else
+                " FROZEN / RESUME " if self.paused else " LIVE SIM / PAUSE ")
+        mode_x = self.w - len(mode) - 1
+        self.put(2, 1, ("REAL BLE ADVERTISING / RSSI dBm" if self.ble.monitoring else "REAL BLE LINK / DEVICE-SIMULATED PAYLOAD") if self.view == 7 else
+                 "LOCAL CONSOLE / FICTIONAL THREAT TRAFFIC", "dim", mode_x - 2)
+        if self.editing:
+            self.put(2, mode_x, mode, "amber")
+        else:
+            self.button(2, mode_x, mode, "resume" if self.paused or self.calm else "pause", "amber")
         x = 1
-        names = VIEWS if self.w >= 80 else ("CTL", "WIRE", "ID", "VAULT", "HELP", "FLY", "OPS")
+        names = VIEWS if self.w >= 84 else ("CTL", "WIRE", "ID", "VAULT", "HELP", "FLY", "OPS", "BLE")
         for i, name in enumerate(names):
-            label = f" {i+1} {name} "
-            self.button(3, x, label, ("home", "feed", "dossier", "vault", "help", "fly", "ops")[i], "bar" if i == self.view else "dim")
+            label = f" {i+1}{name} " if self.w < 70 else f" {i+1} {name} "
+            self.button(3, x, label, ("home", "feed", "dossier", "vault", "help", "fly", "ops", "ble")[i], "bar" if i == self.view else "dim")
             x += len(label) + 1
-        if self.w >= 94:
+        if self.w >= x + 16:
             self.button(3, self.w - 16, " [f] BROFIST ", "brofist", "alert")
         self.put(4, 1, marquee("/////      /////      /////      /////", self.w - 2, -self.fx_time * 18), "blood" if self.panic else "ghost")
-        (self.control, self.wire, self.dossier, self.vault, self.manual, self.flylab, self.operations)[self.view]()
+        (self.control, self.wire, self.dossier, self.vault, self.manual, self.flylab, self.operations, self.ble_page)[self.view]()
         self.brofist_overlay()
         self.line(self.h - 4, 1, self.w - 2)
-        self.put(self.h - 3, 1, self.store.error or self.message, "red" if self.store.error else "amber", self.w - 2)
+        self.put(self.h - 3, 1, self.store.error or (self.ble.message if self.view == 7 else self.message),
+                 "red" if self.store.error else "amber", self.w - 2)
         if self.editing:
             self.fill(self.h - 2, 1, self.w - 2, "soft")
             self.put(self.h - 2, 1, " : ", "mint")
@@ -497,8 +510,11 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
                 pass
         else:
             self.button(self.h - 2, 1, " [f] BROFIST ", "brofist", "alert")
-            self.put(self.h - 2, 15, "[:]cmd [b]Bash [6]fly [7]ops [Space]freeze [q]exit", "mint")
-            self.put(self.h - 1, 1, "CONNECTED TO ABSOLUTELY NOTHING.   ALL PANIC IS LOCALLY SOURCED.", "dim", self.w - 24)
+            self.put(self.h - 2, 15, "[v]MIDI [a]adv [s]scan [c]connect [d]stop" if self.view == 7 else
+                     "[:]cmd [b]Bash [6]fly [7]ops [Space]freeze [q]exit", "mint")
+            self.put(self.h - 1, 1, (f"BLE / {self.ble.state.upper()} / REAL ADVERTISING" if self.ble.monitoring else
+                     f"BLE / {self.ble.state.upper()} / PAYLOAD SIMULATED BY ESP32") if self.view == 7 else
+                     "CONNECTED TO ABSOLUTELY NOTHING.   ALL PANIC IS LOCALLY SOURCED.", "dim", self.w - 24)
             self.kitty_button()
             try:
                 curses.curs_set(0)
@@ -525,7 +541,10 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
         cmd = cmd.lower()
         arg = clean(arg.strip())
         views = {"home": 0, "feed": 1, "dossier": 2, "vault": 3, "help": 4, "fly": 5, "ops": 6}
-        if cmd in views:
+        if cmd == "ble":
+            self.change_view(7)
+            self.ble_command(arg)
+        elif cmd in views:
             self.change_view(views[cmd])
             self.message = VIEWS[self.view] + " selected."
         elif cmd in ("quit", "exit", "q"):
@@ -548,10 +567,9 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
             self.kitty_petted_until = self.fx_time + 6
             self.bureau.shutdown()
             self.panic, self.threat, self.cope = False, 12, 100
-            self.paused = True
             self.brofist_started = None
             self.doom_enabled = False
-            self.message = "Kitty: purrrrr <3  emotional support human selected. Experiments shut down. Space resumes."
+            self.message = "Kitty: purrrrr <3  emotional support human selected. Experiments shut down."
             self.log("KITTY", "mrrp. <3")
         elif cmd == "brofist":
             if self.brofist_started is not None:
@@ -598,13 +616,24 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
             self.message = "GRASS CONTACT CONFIRMED. The outside has accepted your request."
             self.log("COPE", self.message)
             self.change_view(0)
-        elif cmd == "pause":
-            self.paused = not self.paused
-            self.message = "Simulation frozen. You can breathe." if self.paused else "Simulation resumed."
+        elif cmd in ("pause", "resume"):
+            if cmd == "resume" or self.paused or self.calm:
+                self.paused = False
+                was_calm = self.calm
+                self.calm = False
+                self.message = "Simulation resumed. Calm mode off." if was_calm else "Simulation resumed."
+                if was_calm:
+                    self.store.data["calm"] = False
+                    self.save()
+            else:
+                self.paused = True
+                self.message = "Simulation frozen. Space or RESUME to continue."
         elif cmd == "calm":
             self.calm = not self.calm
             self.store.data["calm"] = self.calm
-            self.message = "Calm mode on. Automatic simulation updates stopped." if self.calm else "Calm mode off. The timeline is moving."
+            self.message = ("Calm mode on. Space or RESUME to continue." if self.calm else
+                            "Calm mode off. Space or RESUME to continue." if self.paused else
+                            "Calm mode off. The timeline is moving.")
             self.save()
         elif cmd == "note":
             if not arg:
@@ -711,7 +740,7 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
                 if state & curses.BUTTON1_PRESSED:
                     for row, start, end, command in self.buttons:
                         if row == y and start <= x < end:
-                            if self.brofist_started is not None and command != "brofist":
+                            if self.brofist_started is not None and command not in ("brofist", "pause", "resume"):
                                 break
                             self.command(command)
                             break
@@ -721,7 +750,7 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
             self.brofist_started = None
         elif key in ("q", "Q"):
             self.running = False
-        elif isinstance(key, str) and key in "1234567":
+        elif isinstance(key, str) and key in "12345678":
             self.change_view(int(key) - 1)
         elif key in ("\t", curses.KEY_BTAB):
             self.change_view((self.view + (-1 if key == curses.KEY_BTAB else 1)) % len(VIEWS))
@@ -729,6 +758,14 @@ class Console(CreaturePanels, ArcadePanels, SearchPanels, BureauPanels):
             self.prompt()
         elif key in ("?", curses.KEY_F1):
             self.change_view(4)
+        elif self.view == 7 and key in ("a", "v", "s", "c", "d", "u", "\n", "\r", curses.KEY_ENTER):
+            self.ble_command({"a": "sniff", "v": "adv-midi", "s": "scan", "c": "connect", "d": "disconnect", "u": "music"}.get(key, "connect"))
+        elif self.view == 7 and key in (curses.KEY_UP, curses.KEY_DOWN):
+            if self.ble.monitoring:
+                self.ble.advertising.offset = max(0, self.ble.advertising.offset + (1 if key == curses.KEY_DOWN else -1))
+            else:
+                self.ble.selected = max(0, min(len(self.ble.devices) - 1,
+                                              self.ble.selected + (1 if key == curses.KEY_DOWN else -1)))
         elif key == "n":
             self.prompt("note ")
         elif key == "p":
@@ -784,6 +821,12 @@ def main(argv=None):
     parser.add_argument("--ascii", action="store_true", help="use ASCII borders and headline lettering")
     parser.add_argument("--no-boot", action="store_true", help="skip the short boot banner")
     parser.add_argument("--doctor", action="store_true", help="print terminal and install diagnostics")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--ble-sniff", action="store_true", help="open unfiltered BLE advertising monitor with RSSI")
+    source.add_argument("--ble-adv-midi", nargs="?", const=BUMBLE_ADDRESS, metavar="ADDRESS",
+                        help="play Bumble manufacturer advertising notes without connecting (optional address)")
+    source.add_argument("--ble-interface", metavar="INTERFACE", help="capture using a TShark BLE RF sniffer interface")
+    source.add_argument("--ble-capture", metavar="PCAP", help="inspect an existing BLE RF capture with TShark")
     args = parser.parse_args(argv)
     locale.setlocale(locale.LC_ALL, "")
     if args.doctor:
@@ -806,7 +849,17 @@ def main(argv=None):
     for sig in (signal.SIGTERM, signal.SIGHUP):
         previous[sig] = signal.signal(sig, stop)
     try:
-        curses.wrapper(lambda screen: Console(screen, args, store).run())
+        def run_console(screen):
+            console = Console(screen, args, store)
+            try:
+                if args.ble_sniff or args.ble_interface or args.ble_capture or args.ble_adv_midi:
+                    console.change_view(7)
+                    console.ble.start("adv-midi" if args.ble_adv_midi else "replay" if args.ble_capture else "sniff-rf" if args.ble_interface else "sniff",
+                                      args.ble_adv_midi or args.ble_capture or args.ble_interface or "")
+                console.run()
+            finally:
+                console.ble.close()
+        curses.wrapper(run_console)
     except KeyboardInterrupt:
         pass
     except curses.error as exc:

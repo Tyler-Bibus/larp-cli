@@ -98,7 +98,7 @@ FONT = {
 }
 
 HELP = [
-    ("1 / 2 / 3 / 4 / 5 / 6 / 7", "Control, wire, dossier, vault, manual, fly lab, operations"),
+    ("1 / 2 / 3 / 4 / 5 / 6 / 7 / 8", "Control, wire, dossier, vault, manual, fly lab, operations, BLE"),
     ("Tab / Shift-Tab", "Next / previous screen"),
     ("f / click BROFIST", "Fist bump animation, +67 aura, fly reaction; f/Esc dismiss"),
     ("6 / :fly", "Mock fly brain and animated ASCII fly"),
@@ -109,7 +109,7 @@ HELP = [
     ("p", "Trigger / contain a fictional crashout"),
     ("a", "Farm aura; consequences are unpredictable"),
     ("g", "Touch grass; replenish cope and lower threat"),
-    ("Space", "Freeze / resume the fictional simulation"),
+    ("Space / PAUSE / RESUME", "Freeze / resume the fictional simulation; resume also turns calm mode off"),
     ("m", "Toggle calm mode (no automatic updates)"),
     ("b", "Open real Bash; type exit to return"),
     ("n", "Write a persistent local note"),
@@ -118,10 +118,14 @@ HELP = [
     ("q / Ctrl-C / Ctrl-D", "Exit LRP and restore your terminal"),
     ("? / F1", "Open this manual"),
     ("COMMANDS", "help / home / feed / dossier / vault / status"),
-    ("", "panic / contain / aura / grass / pause / calm"),
+    ("", "panic / contain / aura / grass / pause / resume / calm"),
     ("", "note <text> / alias <name> / shell / quit"),
     ("", "fly / brofist / stimulate / doom / kitty"),
     ("7 / :ops", "Overfunded agency: clickable fictional experiments and receipts"),
+    ("8 / :ble", "Real Bluetooth; a starts all-advertiser discovery with RSSI in dBm; d stops"),
+    ("ble sniff [interface]", "Monitor unknown BLE advertisers; an RF sniffer supplies measured channels/CRC"),
+    ("ble replay <pcap>", "Inspect BLE RF capture with TShark; adapter mode cannot report channels/CRC"),
+    ("v / :ble adv-midi", "BLE: Bumble BM v1/v2 at F0:F1:F2:F3:F4:F5; v2 supports eight GM voices and drums"),
     ("overthink <message>", "Analyze a harmless message with excessive graph machinery"),
     ("lockin / audit / swarm", "Collide motivation, audit aura, or deploy more little guys"),
     ("breach / nonchalance", "Open dimensional storage or visibly try to look unbothered"),

@@ -17,7 +17,7 @@ import time
 import unittest
 from collections import deque
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from lrp import __version__
 from lrp.arcade import FlyDoom
@@ -202,6 +202,37 @@ class TerminalTests(unittest.TestCase):
             self.assertEqual(t.process.returncode, 0)
             self.assertNotIn(b"Traceback", t.output)
 
+    def test_visible_pause_controls_and_kitty_in_live_and_compact_layouts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for rows, cols in ((40, 120), (24, 64)):
+                with self.subTest(rows=rows, cols=cols):
+                    t = self.launch(directory, rows=rows, cols=cols, options=("--ascii",))
+                    t.send("k")
+                    self.assertIn(b"LIVE SIM / PAUSE", t.send("\x0c"))
+                    # Status control occupies the right-hand side of row 3.
+                    click = f"\x1b[<0;{cols - 3};3M\x1b[<0;{cols - 3};3m"
+                    t.send(click)
+                    self.assertIn(b"FROZEN / RESUME", t.send("\x0c"))
+                    t.send("f")  # A static overlay must not block the resume button.
+                    t.send(click)
+                    self.assertIn(b"LIVE SIM / PAUSE", t.send("\x0c"))
+                    t.send("f")
+                    t.send("m")
+                    self.assertIn(b"CALM / RESUME", t.send("\x0c"))
+                    t.send(click)
+                    self.assertIn(b"LIVE SIM / PAUSE", t.send("\x0c"))
+                    state = Path(directory) / "lrp/state.json"
+                    self.assertFalse(json.loads(state.read_text())["calm"])
+                    t.send(":")
+                    # Force a redraw through resize while the editor is open.
+                    t.resize(rows + 1, cols)
+                    self.assertIn(b"INPUT / Esc cancel", t.output)
+                    t.send("\x1b")
+                    self.assertIn(b"LIVE SIM / PAUSE", t.send("\x0c"))
+                    self.assertEqual(t.finish(), t.original)
+                    self.assertEqual(t.process.returncode, 0)
+                    self.assertNotIn(b"Traceback", t.output)
+
     def test_flylab_keyboard_mouse_brofist_and_compact_layout(self):
         with tempfile.TemporaryDirectory() as directory:
             t = self.launch(directory, options=("--calm",))
@@ -360,6 +391,75 @@ class InstallerTests(unittest.TestCase):
             launcher.write_text("existing unrelated command")
             self.assertEqual(installer().returncode, 1)
             self.assertEqual(launcher.read_text(), "existing unrelated command")
+
+
+class PauseTests(unittest.TestCase):
+    def make_console(self, calm=False):
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / "state.json")
+            store.save = Mock(return_value=True)
+            args = SimpleNamespace(calm=calm, ascii=True, no_boot=True)
+            with patch.object(Console, "setup"):
+                app = Console(Mock(), args, store)
+        return app
+
+    def test_kitty_contains_experiments_without_freezing_animation(self):
+        app = self.make_console()
+        app.command("panic")
+        app.command("breach")
+        app.command("incident")
+        app.command("nonchalance")
+        app.doom_enabled = True
+        app.command("kitty")
+        self.assertFalse(app.paused)
+        self.assertFalse(app.panic)
+        self.assertFalse(app.doom_enabled)
+        self.assertFalse(app.bureau.case_active)
+        self.assertFalse(app.bureau.storage_open)
+        self.assertFalse(app.bureau.nonchalant)
+        before = app.fx_time
+        with patch("lrp.app.time.monotonic", return_value=app.last_frame + .10):
+            app.update()
+        self.assertGreater(app.fx_time, before)
+        self.assertGreater(app.search.time, 0)
+
+    def test_kitty_preserves_an_explicit_pause_or_calm_mode(self):
+        for flag in ("paused", "calm"):
+            with self.subTest(flag=flag):
+                app = self.make_console()
+                setattr(app, flag, True)
+                app.command("kitty")
+                self.assertTrue(getattr(app, flag))
+                with patch("lrp.app.time.monotonic", return_value=app.last_frame + .05):
+                    app.update()
+                self.assertEqual(app.fx_time, 0)
+
+    def test_space_resumes_every_combination_of_pause_and_calm(self):
+        for paused, calm in ((True, False), (False, True), (True, True)):
+            with self.subTest(paused=paused, calm=calm):
+                app = self.make_console(calm=calm)
+                app.paused = paused
+                app.store.data["calm"] = calm
+                app.key(" ")
+                self.assertFalse(app.paused)
+                self.assertFalse(app.calm)
+                self.assertFalse(app.store.data["calm"])
+                before = app.fx_time
+                with patch("lrp.app.time.monotonic", return_value=app.last_frame + .05):
+                    app.update()
+                self.assertGreater(app.fx_time, before)
+                if calm:
+                    app.store.save.assert_called()
+                app.key(" ")
+                self.assertTrue(app.paused)
+
+    def test_resume_is_idempotent(self):
+        app = self.make_console(calm=True)
+        app.paused = True
+        for _ in range(2):
+            app.command("resume")
+            self.assertFalse(app.paused)
+            self.assertFalse(app.calm)
 
 
 class AnimationTests(unittest.TestCase):
